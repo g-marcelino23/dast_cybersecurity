@@ -346,6 +346,21 @@ class AuthProfileBase(BaseModel):
     mfa_challenge_field: str | None = Field(default=None, max_length=128)
     mfa_code_field: str | None = Field(default=None, max_length=128)
     role_json_path: str | None = Field(default=None, max_length=255)
+    oidc_discovery_url: str | None = Field(default=None, max_length=2048)
+    oauth_scopes: list[str] = Field(default_factory=list, max_length=50)
+    oauth_audience: str | None = Field(default=None, max_length=255)
+
+    @field_validator("oauth_scopes")
+    @classmethod
+    def validate_oauth_scopes(cls, values: list[str]) -> list[str]:
+        result: list[str] = []
+        for value in values:
+            clean = value.strip()
+            if not re.fullmatch(r"[A-Za-z0-9:._/-]{1,128}", clean):
+                raise ValueError("Escopo OAuth inválido.")
+            if clean not in result:
+                result.append(clean)
+        return result
 
 
 class AuthProfileCreate(AuthProfileBase):
@@ -374,8 +389,25 @@ class AuthProfileUpdate(BaseModel):
     mfa_challenge_field: str | None = Field(default=None, max_length=128)
     mfa_code_field: str | None = Field(default=None, max_length=128)
     role_json_path: str | None = Field(default=None, max_length=255)
+    oidc_discovery_url: str | None = Field(default=None, max_length=2048)
+    oauth_scopes: list[str] | None = Field(default=None, max_length=50)
+    oauth_audience: str | None = Field(default=None, max_length=255)
     username: SecretStr | None = Field(default=None, min_length=1, max_length=1024)
     password: SecretStr | None = Field(default=None, min_length=1, max_length=4096)
+
+    @field_validator("oauth_scopes")
+    @classmethod
+    def validate_oauth_scopes(cls, values: list[str] | None) -> list[str] | None:
+        if values is None:
+            return None
+        result: list[str] = []
+        for value in values:
+            clean = value.strip()
+            if not re.fullmatch(r"[A-Za-z0-9:._/-]{1,128}", clean):
+                raise ValueError("Escopo OAuth inválido.")
+            if clean not in result:
+                result.append(clean)
+        return result
 
 
 class AuthProfileRead(AuthProfileBase):

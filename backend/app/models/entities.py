@@ -109,7 +109,7 @@ class Scan(Base):
     status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus), default=ScanStatus.PENDING)
     mode: Mapped[ScanMode] = mapped_column(Enum(ScanMode), default=ScanMode.DISCOVERY_PASSIVE)
     experiment_label: Mapped[str | None] = mapped_column(String(160), index=True)
-    dast_version: Mapped[str] = mapped_column(String(32), default="0.24.0")
+    dast_version: Mapped[str] = mapped_column(String(32), default="0.25.0")
     modules_enabled: Mapped[list[str]] = mapped_column(JsonDocument, default=list)
     configuration_snapshot: Mapped[dict[str, object]] = mapped_column(JsonDocument, default=dict)
     preset: Mapped[str] = mapped_column(String(32), default="PASSIVE")
@@ -193,6 +193,9 @@ class AuthProfile(Base):
     mfa_challenge_field: Mapped[str | None] = mapped_column(String(128))
     mfa_code_field: Mapped[str | None] = mapped_column(String(128))
     role_json_path: Mapped[str | None] = mapped_column(String(255))
+    oidc_discovery_url: Mapped[str | None] = mapped_column(String(2048))
+    oauth_scopes: Mapped[list[str]] = mapped_column(JsonDocument, default=list)
+    oauth_audience: Mapped[str | None] = mapped_column(String(255))
     encrypted_username: Mapped[str | None] = mapped_column(Text)
     encrypted_password: Mapped[str | None] = mapped_column(Text)
     last_auth_success: Mapped[bool | None] = mapped_column(Boolean)
@@ -215,6 +218,8 @@ class AuthProfile(Base):
             return bool(self.header_template)
         if self.auth_type == AuthType.CUSTOM_HEADERS:
             return bool(self.header_template)
+        if self.auth_type == AuthType.OAUTH2_CLIENT_CREDENTIALS:
+            return bool(self.encrypted_username)
         return bool(self.encrypted_username)
 
 

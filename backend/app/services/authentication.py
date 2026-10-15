@@ -1,11 +1,13 @@
 import json
 import logging
+import re
 from base64 import b64encode
 from dataclasses import dataclass
 from http.cookies import SimpleCookie
 from threading import Lock
 from time import monotonic
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -131,6 +133,10 @@ class Authenticator:
                 role_name=profile.role_name,
                 session_metadata={"auth_type": AuthType.NONE},
             )
+        if profile.auth_type == AuthType.OAUTH2_CLIENT_CREDENTIALS:
+            return self._authenticate_oauth_client_credentials(
+                profile, target, username, password, secret
+            )
         if profile.auth_type in DIRECT_AUTH_TYPES:
             return self._authenticate_direct(profile, target, username, password, secret)
         if not profile.login_url:
@@ -234,6 +240,96 @@ class Authenticator:
                 password=password or "",
                 secret=secret or "",
             )
+        validation_url = ensure_auth_url_in_target_scope(
+            profile.validation_url or target.api_url or target.base_url, target
+        )
+        validation = self._request(validation_url, "GET", headers=headers)
+        if not 200 <= validation.status_code < 400:
+            raise AuthenticationError("Authentication validation failed", validation.status_code)
+        if profile.role_json_path:
+            observed_role = self._extract_json_value(validation.body, profile.role_json_path)
+            if observed_role != profile.role_name:
+                raise AuthenticationError(
+                    "Authenticated role does not match the configured role.",
+                    validation.status_code,
+                    "ROLE_MISMATCH",
+                )
+        return AuthContext(
+            headers=headers,
+            profile_id=profile.id,
+            profile_name=profile.name,
+            role_name=profile.role_name,
+            session_metadata={"auth_type": profile.auth_type.value},
+        )
+
+    def _authenticate_oauth_client_credentials(
+        self,
+        profile: AuthProfile,
+        target: Target,
+        client_id: str | None,
+        password: str | None,
+        secret: str | None,
+    ) -> AuthContext:
+        resolved_client_id = client_id
+        if resolved_client_id is None and profile.encrypted_username:
+            resolved_client_id = self.vault.decrypt(profile.encrypted_username)
+        client_secret = secret or password
+        if not resolved_client_id or not client_secret:
+            raise AuthenticationError("Client ID and client secret are required for OAuth.")
+
+        token_url = profile.login_url
+        if profile.oidc_discovery_url:
+            discovery_url = ensure_auth_url_in_target_scope(profile.oidc_discovery_url, target)
+            discovery = self._request(discovery_url, "GET")
+            if not 200 <= discovery.status_code < 300:
+                raise AuthenticationError(
+                    "OIDC discovery failed.", discovery.status_code, "OIDC_DISCOVERY_FAILED"
+                )
+            discovered = self._extract_json_value(discovery.body, "token_endpoint")
+            if not isinstance(discovered, str) or not discovered:
+                raise AuthenticationError(
+                    "OIDC discovery did not provide a token endpoint.",
+                    discovery.status_code,
+                    "OIDC_CONFIGURATION_ERROR",
+                )
+            token_url = ensure_auth_url_in_target_scope(discovered, target)
+        if not token_url:
+            raise AuthenticationError("OAuth token endpoint is not configured.")
+        token_url = ensure_auth_url_in_target_scope(token_url, target)
+
+        form_body = {"grant_type": "client_credentials"}
+        if profile.oauth_scopes:
+            form_body["scope"] = " ".join(profile.oauth_scopes)
+        if profile.oauth_audience:
+            form_body["audience"] = profile.oauth_audience
+        encoded_client_id = quote(resolved_client_id, safe="")
+        encoded_client_secret = quote(client_secret, safe="")
+        encoded = b64encode(f"{encoded_client_id}:{encoded_client_secret}".encode()).decode("ascii")
+        token_response = self._request(
+            token_url,
+            "POST",
+            headers={"Authorization": f"Basic {encoded}"},
+            form_body=form_body,
+        )
+        if not 200 <= token_response.status_code < 300:
+            raise AuthenticationError("OAuth token request failed.", token_response.status_code)
+        token = self._extract_token(token_response.body, profile.token_json_path or "access_token")
+        try:
+            token_type = self._extract_json_value(token_response.body, "token_type")
+        except AuthenticationError:
+            token_type = None
+        prefix = (
+            token_type
+            if isinstance(token_type, str) and token_type.strip()
+            else profile.token_prefix or "Bearer"
+        )
+        if not isinstance(prefix, str) or not re.fullmatch(
+            r"[A-Za-z][A-Za-z0-9._-]{0,63}", prefix.strip()
+        ):
+            raise AuthenticationError("OAuth token type is invalid.")
+        header_name = profile.token_header_name or "Authorization"
+        headers = {header_name: f"{prefix.strip()} {token}"}
+
         validation_url = ensure_auth_url_in_target_scope(
             profile.validation_url or target.api_url or target.base_url, target
         )

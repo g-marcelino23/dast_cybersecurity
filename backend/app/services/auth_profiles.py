@@ -1,4 +1,5 @@
 import json
+import re
 
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
@@ -28,6 +29,7 @@ DIRECT_AUTH_TYPES = {
     AuthType.API_KEY,
     AuthType.CUSTOM_HEADERS,
 }
+OAUTH_AUTH_TYPES = {AuthType.OAUTH2_CLIENT_CREDENTIALS}
 RESERVED_HEADERS = {"host", "content-length", "transfer-encoding", "connection"}
 SENSITIVE_HEADER_NAMES = {"authorization", "cookie", "x-api-key", "api-key"}
 
@@ -88,12 +90,21 @@ class AuthProfileService:
             profile.encrypted_password = None
             profile.body_template = None
             profile.header_template = None
+            profile.oidc_discovery_url = None
+            profile.oauth_scopes = []
+            profile.oauth_audience = None
+            return
+        if profile.auth_type in OAUTH_AUTH_TYPES:
+            AuthProfileService._normalize_oauth(profile, target)
             return
         if profile.auth_type in DIRECT_AUTH_TYPES:
             AuthProfileService._normalize_direct(profile, target)
             return
         if profile.auth_type not in LOGIN_AUTH_TYPES or not profile.login_url:
             raise AuthProfileError("Informe a URL de login.")
+        profile.oidc_discovery_url = None
+        profile.oauth_scopes = []
+        profile.oauth_audience = None
         try:
             profile.login_url = ensure_auth_url_in_target_scope(profile.login_url, target)
             if profile.validation_url:
@@ -147,6 +158,9 @@ class AuthProfileService:
         profile.password_field = None
         profile.token_header_name = None
         profile.token_prefix = None
+        profile.oidc_discovery_url = None
+        profile.oauth_scopes = []
+        profile.oauth_audience = None
         if profile.validation_url:
             try:
                 profile.validation_url = ensure_auth_url_in_target_scope(
@@ -173,8 +187,10 @@ class AuthProfileService:
                 or clean_name.casefold() in RESERVED_HEADERS
             ):
                 raise AuthProfileError("Nome de header personalizado inválido ou reservado.")
-            if not isinstance(value, str) or len(value) > 16384 or any(
-                character in value for character in "\r\n"
+            if (
+                not isinstance(value, str)
+                or len(value) > 16384
+                or any(character in value for character in "\r\n")
             ):
                 raise AuthProfileError("Valor de header personalizado inválido.")
             if (
@@ -186,3 +202,40 @@ class AuthProfileService:
                     "Headers sensíveis devem usar {{secret}} ou {{password}}; "
                     "não grave credenciais no template."
                 )
+
+    @staticmethod
+    def _normalize_oauth(profile: AuthProfile, target: Target) -> None:
+        if not profile.login_url and not profile.oidc_discovery_url:
+            raise AuthProfileError("Informe o token endpoint ou a descoberta OIDC.")
+        if not profile.encrypted_username:
+            raise AuthProfileError("Informe o client ID OAuth.")
+        try:
+            if profile.login_url:
+                profile.login_url = ensure_auth_url_in_target_scope(profile.login_url, target)
+            if profile.oidc_discovery_url:
+                profile.oidc_discovery_url = ensure_auth_url_in_target_scope(
+                    profile.oidc_discovery_url, target
+                )
+            if profile.validation_url:
+                profile.validation_url = ensure_auth_url_in_target_scope(
+                    profile.validation_url, target
+                )
+        except (AuthenticationError, TargetPolicyError) as exc:
+            raise AuthProfileError(str(exc)) from exc
+        scopes = profile.oauth_scopes or []
+        if any(not re.fullmatch(r"[A-Za-z0-9:._/-]{1,128}", scope) for scope in scopes):
+            raise AuthProfileError("Escopo OAuth inválido.")
+        profile.oauth_scopes = list(dict.fromkeys(scopes))
+        profile.body_encoding = "FORM"
+        profile.body_template = None
+        profile.header_template = None
+        profile.username_field = None
+        profile.password_field = None
+        profile.token_json_path = profile.token_json_path or "access_token"
+        profile.token_header_name = profile.token_header_name or "Authorization"
+        profile.token_prefix = profile.token_prefix or "Bearer"
+        profile.mfa_url = None
+        profile.mfa_challenge_json_path = None
+        profile.mfa_challenge_field = None
+        profile.mfa_code_field = None
+        profile.encrypted_password = None

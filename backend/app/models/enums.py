@@ -83,6 +83,7 @@ class AuthType(StrEnum):
     BEARER_TOKEN = "BEARER_TOKEN"
     API_KEY = "API_KEY"
     CUSTOM_HEADERS = "CUSTOM_HEADERS"
+    OAUTH2_CLIENT_CREDENTIALS = "OAUTH2_CLIENT_CREDENTIALS"
 
 
 class SensitiveDataCategory(StrEnum):

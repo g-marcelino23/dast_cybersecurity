@@ -297,6 +297,138 @@ def test_basic_authentication_uses_ephemeral_password(
     assert "one-use-password" not in json.dumps(context.session_metadata)
 
 
+def test_oauth_client_credentials_uses_ephemeral_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = Fernet.generate_key().decode("ascii")
+    vault = CredentialVault(key)
+    authenticator = Authenticator(vault, settings(key))
+    requests: list[tuple[str, str, dict[str, object]]] = []
+
+    def fake_request(raw_url: str, method: str, **kwargs: object) -> SafeResponse:
+        requests.append((raw_url, method, kwargs))
+        if method == "POST":
+            return SafeResponse(
+                200,
+                httpx.Headers(),
+                b'{"access_token":"temporary-access","token_type":"Bearer"}',
+                {},
+            )
+        return SafeResponse(200, httpx.Headers(), b"{}", {})
+
+    monkeypatch.setattr(authenticator, "_request", fake_request)
+    profile = AuthProfile(
+        id=73,
+        target_id=1,
+        name="OAuth service",
+        role_name="SERVICE",
+        auth_type=AuthType.OAUTH2_CLIENT_CREDENTIALS,
+        login_url="http://127.0.0.1:8765/oauth/token",
+        validation_url="http://127.0.0.1:8765/api/me",
+        encrypted_username=vault.encrypt("dast+client"),
+        oauth_scopes=["api.read", "patients.read"],
+        oauth_audience="local-api",
+    )
+    target = Target(id=1, name="App", base_url="http://127.0.0.1:8765")
+
+    context = authenticator.authenticate(profile, target, secret="temporary:secret")
+
+    expected_basic = b64encode(b"dast%2Bclient:temporary%3Asecret").decode("ascii")
+    assert requests[0] == (
+        "http://127.0.0.1:8765/oauth/token",
+        "POST",
+        {
+            "headers": {"Authorization": f"Basic {expected_basic}"},
+            "form_body": {
+                "grant_type": "client_credentials",
+                "scope": "api.read patients.read",
+                "audience": "local-api",
+            },
+        },
+    )
+    assert requests[1][2]["headers"] == {"Authorization": "Bearer temporary-access"}
+    assert context.headers == {"Authorization": "Bearer temporary-access"}
+    serialized_metadata = json.dumps(context.session_metadata)
+    assert "temporary:secret" not in serialized_metadata
+    assert "temporary-access" not in serialized_metadata
+
+
+def test_oauth_client_credentials_supports_oidc_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = Fernet.generate_key().decode("ascii")
+    vault = CredentialVault(key)
+    authenticator = Authenticator(vault, settings(key))
+    requested_urls: list[str] = []
+
+    def fake_request(raw_url: str, method: str, **kwargs: object) -> SafeResponse:
+        requested_urls.append(raw_url)
+        if raw_url.endswith("openid-configuration"):
+            return SafeResponse(
+                200,
+                httpx.Headers(),
+                b'{"token_endpoint":"http://127.0.0.1:8765/discovered/token"}',
+                {},
+            )
+        if method == "POST":
+            return SafeResponse(200, httpx.Headers(), b'{"access_token":"token"}', {})
+        return SafeResponse(204, httpx.Headers(), b"", {})
+
+    monkeypatch.setattr(authenticator, "_request", fake_request)
+    profile = AuthProfile(
+        id=74,
+        target_id=1,
+        name="OIDC service",
+        role_name="SERVICE",
+        auth_type=AuthType.OAUTH2_CLIENT_CREDENTIALS,
+        oidc_discovery_url=("http://127.0.0.1:8765/.well-known/openid-configuration"),
+        validation_url="http://127.0.0.1:8765/api/me",
+        encrypted_username=vault.encrypt("oidc-client"),
+    )
+    target = Target(id=1, name="App", base_url="http://127.0.0.1:8765")
+
+    context = authenticator.authenticate(profile, target, secret="temporary-secret")
+
+    assert requested_urls == [
+        "http://127.0.0.1:8765/.well-known/openid-configuration",
+        "http://127.0.0.1:8765/discovered/token",
+        "http://127.0.0.1:8765/api/me",
+    ]
+    assert context.headers == {"Authorization": "Bearer token"}
+
+
+def test_oauth_profile_api_hides_client_id_and_rejects_persisted_secret(client) -> None:
+    target = client.post(
+        "/targets",
+        json={"name": "OAuth", "base_url": "http://127.0.0.1:8765"},
+    ).json()
+    payload = {
+        "name": "Machine client",
+        "role_name": "SERVICE",
+        "auth_type": "OAUTH2_CLIENT_CREDENTIALS",
+        "login_url": "http://127.0.0.1:8765/oauth/token",
+        "validation_url": "http://127.0.0.1:8765/api/me",
+        "username": "private-client-id",
+        "oauth_scopes": ["api.read", "api.read", "patients.read"],
+        "oauth_audience": "local-api",
+    }
+
+    created = client.post(f"/targets/{target['id']}/auth-profiles", json=payload)
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["credentials_configured"] is True
+    assert body["oauth_scopes"] == ["api.read", "patients.read"]
+    assert "private-client-id" not in created.text
+    assert "encrypted_username" not in created.text
+    forbidden = client.post(
+        f"/targets/{target['id']}/auth-profiles",
+        json={**payload, "client_secret": "must-not-persist"},
+    )
+    assert forbidden.status_code == 422
+    assert "must-not-persist" not in forbidden.text
+
+
 def test_form_login_sends_urlencoded_fields_and_keeps_cookie_ephemeral(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

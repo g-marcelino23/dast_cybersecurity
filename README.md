@@ -1,6 +1,6 @@
-# DAST 0.24.0
+# DAST 0.25.0
 
-Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs autorizadas. A versão 0.24.0 acrescenta aplicações com múltiplos componentes WEB, API e SERVICE sob uma única política de escopo, preservando prova de propriedade, allowlist exata e bloqueio de destinos externos.
+Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs autorizadas. A versão 0.25.0 acrescenta autenticação OAuth 2.0 Client Credentials com descoberta OIDC opcional, mantendo client secrets e access tokens somente na sessão temporária do scan.
 
 ## Capacidades
 
@@ -9,7 +9,7 @@ Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs 
 - descoberta de endpoints de frontend e backend;
 - até 20 componentes WEB, API ou SERVICE adicionais por aplicação;
 - análise passiva de headers, cookies, CORS, TLS, conteúdo misto, redirects e exposição de servidor;
-- scans anônimos ou autenticados por login JSON/formulário, Cookie, Basic, Bearer Token, API Key ou headers personalizados;
+- scans anônimos ou autenticados por login JSON/formulário, Cookie, OAuth 2.0 Client Credentials/OIDC, Basic, Bearer Token, API Key ou headers personalizados;
 - comparação da superfície observada por diferentes perfis;
 - comparação de achados e endpoints entre scans concluídos do mesmo alvo;
 - comparação de status, tipo, estrutura e tamanho de respostas com tolerância configurável;
@@ -94,9 +94,9 @@ Use a ferramenta somente em aplicações próprias, laboratórios ou sistemas pa
 
 ## Autenticação e autorização
 
-Um perfil de acesso pertence a uma aplicação e possui nome e role livres. Os tipos atuais são `NONE`, `BEARER_LOGIN`, `COOKIE_LOGIN`, `FORM_LOGIN`, `BASIC`, `BEARER_TOKEN`, `API_KEY` e `CUSTOM_HEADERS`.
+Um perfil de acesso pertence a uma aplicação e possui nome e role livres. Os tipos atuais são `NONE`, `BEARER_LOGIN`, `COOKIE_LOGIN`, `FORM_LOGIN`, `OAUTH2_CLIENT_CREDENTIALS`, `BASIC`, `BEARER_TOKEN`, `API_KEY` e `CUSTOM_HEADERS`.
 
-O login aceita body JSON ou formulário configurável com `{{username}}` e `{{password}}`. Perfis diretos usam templates de headers com `{{secret}}`; senhas, tokens e chaves são fornecidos somente na validação e mantidos em sessão temporária para o próximo scan. MFA configurável também é suportado. O identificador pode ser protegido com Fernet por meio de `DAST_SECRET_KEY`.
+O login aceita body JSON ou formulário configurável com `{{username}}` e `{{password}}`. OAuth aceita token endpoint explícito ou descoberta OIDC, scopes e audience opcionais, usando `client_secret_basic`. Perfis diretos usam templates de headers com `{{secret}}`; senhas, client secrets, tokens e chaves são fornecidos somente na validação e mantidos em sessão temporária para o próximo scan. MFA configurável também é suportado. Identificadores e client IDs podem ser protegidos com Fernet por meio de `DAST_SECRET_KEY`.
 
 Testes de autorização comparam um baseline legítimo com a resposta entregue a outro perfil. HTTP 200 isoladamente não confirma vulnerabilidade. Métodos mutáveis são inventariados, mas não executados. Candidatos permanecem `SUGGESTED` e regras precisam estar `APPROVED`.
 
@@ -161,7 +161,3 @@ para validar os módulos ativos ponta a ponta:
 Cadastre `http://127.0.0.1:8775` como alvo `FIXTURE` e execute o preset `Safe Active`.
 O laboratório cobre CWE-22, CWE-79, CWE-89, CWE-601 e CWE-749, registra contadores de
 métodos em `/__metrics` e rejeita POST, PUT, PATCH e DELETE. Não exponha esse servidor à rede.
-
-## Próximas etapas
-
-- autenticação OAuth/OIDC;

@@ -3,7 +3,7 @@
 ## Qualidade automatizada
 
 - [x] `scripts/validate.ps1` termina sem erros.
-- [x] Os 193 testes backend passam em uma versão suportada do Python.
+- [x] Os 196 testes backend passam em uma versão suportada do Python.
 - [x] Os testes frontend passam.
 - [x] Ruff, mypy, ESLint e TypeScript não reportam erros.
 - [x] O build Vite é gerado.
@@ -13,7 +13,7 @@
 ## Banco e execução integrada
 
 - [x] PostgreSQL isolado está saudável em loopback.
-- [ ] `alembic upgrade head` conclui e chega à revisão `0019_target_components`.
+- [ ] `alembic upgrade head` conclui e chega à revisão `0020_oauth_client_credentials`.
 - [x] Backend responde `200` em `/health`.
 - [x] Frontend responde `200` em `http://localhost:5174`.
 - [x] É possível cadastrar um alvo local autorizado.
@@ -35,5 +35,5 @@
 - [x] README corresponde às funcionalidades atuais.
 - [ ] O repositório está limpo e o commit de entrega foi revisado.
 - [x] A versão está alinhada no backend, frontend e interface.
-- [ ] A tag `v0.24.0` aponta para o commit aprovado.
+- [ ] A tag `v0.25.0` aponta para o commit aprovado.
 - [ ] Uma cópia do banco de demonstração, se usada, contém somente dados sintéticos.
