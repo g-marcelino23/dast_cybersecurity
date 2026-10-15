@@ -1,12 +1,13 @@
-# DAST 0.23.0
+# DAST 0.24.0
 
-Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs autorizadas. A versão 0.23.0 acrescenta comparação diferencial segura de respostas entre scans, preservando prova de propriedade, allowlist exata e bloqueio de destinos fora do escopo.
+Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs autorizadas. A versão 0.24.0 acrescenta aplicações com múltiplos componentes WEB, API e SERVICE sob uma única política de escopo, preservando prova de propriedade, allowlist exata e bloqueio de destinos externos.
 
 ## Capacidades
 
 - navegação de sites e SPAs com Chromium isolado;
 - inventário de páginas, formulários, scripts e chamadas fetch/XHR;
 - descoberta de endpoints de frontend e backend;
+- até 20 componentes WEB, API ou SERVICE adicionais por aplicação;
 - análise passiva de headers, cookies, CORS, TLS, conteúdo misto, redirects e exposição de servidor;
 - scans anônimos ou autenticados por login JSON/formulário, Cookie, Basic, Bearer Token, API Key ou headers personalizados;
 - comparação da superfície observada por diferentes perfis;
@@ -163,5 +164,4 @@ métodos em `/__metrics` e rejeita POST, PUT, PATCH e DELETE. Não exponha esse 
 
 ## Próximas etapas
 
-- aplicações com múltiplos componentes;
 - autenticação OAuth/OIDC;

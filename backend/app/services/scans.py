@@ -49,6 +49,7 @@ from app.services.openapi import openapi_endpoints
 from app.services.ownership import verification_status, verified_public_hosts
 from app.services.postman import postman_endpoints
 from app.services.response_signatures import persisted_response_signature
+from app.services.target_components import target_urls, target_web_component_urls
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,9 @@ class ScanService:
             target = self.db.get(Target, scan.target_id)
             if target is None:
                 raise ValueError("Missing target")
-            urls = [target.base_url] + ([target.api_url] if target.api_url else [])
+            urls = target_urls(target)
+            additional_urls = [url for url in urls if url not in {target.base_url, target.api_url}]
+            additional_web_urls = target_web_component_urls(target)
             allowed_public_hosts = verified_public_hosts(target)
             # Validate the entire scope before making any requests; collector revalidates.
             for url in urls:
@@ -175,22 +178,43 @@ class ScanService:
                 if auth is None:
                     auth = authenticator.authenticate(profile, target)
                 self._checkpoint(scan, "DISCOVERING", 20)
-                discovery = (
-                    self.crawler.crawl(target.base_url, target.api_url, auth, allowed_public_hosts)
-                    if allowed_public_hosts
-                    else self.crawler.crawl(target.base_url, target.api_url, auth)
-                )
+                if additional_urls:
+                    discovery = self.crawler.crawl(
+                        target.base_url,
+                        target.api_url,
+                        auth,
+                        allowed_public_hosts,
+                        additional_urls,
+                        additional_web_urls,
+                    )
+                else:
+                    discovery = (
+                        self.crawler.crawl(
+                            target.base_url, target.api_url, auth, allowed_public_hosts
+                        )
+                        if allowed_public_hosts
+                        else self.crawler.crawl(target.base_url, target.api_url, auth)
+                    )
             else:
                 self._checkpoint(scan, "DISCOVERING", 20)
-                discovery = (
-                    self.crawler.crawl(
+                if additional_urls:
+                    discovery = self.crawler.crawl(
                         target.base_url,
                         target.api_url,
                         allowed_public_hosts=allowed_public_hosts,
+                        additional_urls=additional_urls,
+                        additional_navigation_urls=additional_web_urls,
                     )
-                    if allowed_public_hosts
-                    else self.crawler.crawl(target.base_url, target.api_url)
-                )
+                else:
+                    discovery = (
+                        self.crawler.crawl(
+                            target.base_url,
+                            target.api_url,
+                            allowed_public_hosts=allowed_public_hosts,
+                        )
+                        if allowed_public_hosts
+                        else self.crawler.crawl(target.base_url, target.api_url)
+                    )
             if target.openapi_document:
                 self._checkpoint(scan, "IMPORTING_API_SPEC", 45)
                 observed_keys = {

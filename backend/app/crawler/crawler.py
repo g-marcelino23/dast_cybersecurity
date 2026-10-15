@@ -38,8 +38,16 @@ class DiscoveryCrawler:
         api_url: str | None = None,
         auth: AuthContext | None = None,
         allowed_public_hosts: Collection[str] = (),
+        additional_urls: Collection[str] = (),
+        additional_navigation_urls: Collection[str] = (),
     ) -> DiscoveryResult:
-        scope = CrawlerScope.from_target(base_url, api_url, allowed_public_hosts)
+        scope = CrawlerScope.from_target(
+            base_url,
+            api_url,
+            allowed_public_hosts,
+            additional_urls,
+            additional_navigation_urls,
+        )
         inventory = DiscoveryInventory(
             self.settings.crawler_max_requests,
             max_static_requests=self.settings.crawler_max_static_requests,
@@ -47,6 +55,8 @@ class DiscoveryCrawler:
         )
         queue = DiscoveryQueue(self.settings.crawler_max_depth, self.settings.crawler_max_pages)
         queue.add(scope.base_url, 0)
+        for url in additional_navigation_urls:
+            queue.add(normalize_url(url).url, 0)
         timeout_ms = int(self.settings.crawler_timeout_seconds * 1000)
         logger.info("[DISCOVERY] Opening %s", normalize_url(base_url).url)
         try:

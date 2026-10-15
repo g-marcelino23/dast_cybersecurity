@@ -168,7 +168,7 @@ def test_scan_stores_reproducibility_metadata_without_secrets(client) -> None:
     assert response.status_code == 201
     scan = response.json()
     assert scan["experiment_label"] == "doctor-baseline-01"
-    assert scan["dast_version"] == "0.23.0"
+    assert scan["dast_version"] == "0.24.0"
     assert "discovery" in scan["modules_enabled"]
     serialized = str(scan["configuration_snapshot"]).casefold()
     assert "password" not in serialized
@@ -187,9 +187,7 @@ def test_experiment_label_rejects_unsafe_text(client) -> None:
 def test_access_profile_surface_is_profile_driven_not_role_hardcoded(client) -> None:
     target = create_target(client)
     profile = create_profile(client, int(target["id"]), "Research Role", "CUSTOM_ROLE")
-    surface = client.get(
-        f"/auth-profiles/{profile['id']}/access-profile-surface"
-    ).json()
+    surface = client.get(f"/auth-profiles/{profile['id']}/access-profile-surface").json()
     assert surface["profile_name"] == "Research Role"
     assert surface["role_name"] == "CUSTOM_ROLE"
     assert surface["authentication_status"] == "NOT_TESTED"

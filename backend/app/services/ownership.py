@@ -14,6 +14,7 @@ from app.core.target_policy import (
     validate_target,
 )
 from app.models import Target
+from app.services.target_components import component_urls, target_urls
 
 CHALLENGE_PATH = "/.well-known/dast-verification.txt"
 VERIFICATION_TTL = timedelta(days=30)
@@ -25,15 +26,31 @@ def new_verification_token() -> str:
     return secrets.token_urlsafe(32)
 
 
-def configured_hosts(base_url: str, api_url: str | None) -> list[str]:
-    return list(dict.fromkeys(target_hostname(url) for url in [base_url, api_url] if url))
+def configured_hosts(urls: list[str]) -> list[str]:
+    return list(dict.fromkeys(target_hostname(url) for url in urls))
 
 
 def registration_scope(
-    base_url: str, api_url: str | None
-) -> tuple[str, str | None, list[str], bool]:
-    normalized = [str(normalize_target_url(url)) for url in [base_url, api_url] if url]
-    hosts = configured_hosts(normalized[0], normalized[1] if len(normalized) > 1 else None)
+    base_url: str,
+    api_url: str | None,
+    components: list[dict[str, str]] | None = None,
+) -> tuple[str, str | None, list[dict[str, str]], list[str], bool]:
+    component_rows = components or []
+    raw_urls = [base_url] + ([api_url] if api_url else []) + component_urls(component_rows)
+    normalized = [str(normalize_target_url(url)) for url in raw_urls]
+    normalized_base = normalized[0]
+    normalized_api = normalized[1] if api_url else None
+    normalized_components = [
+        {**item, "url": normalized[index + 1 + int(api_url is not None)]}
+        for index, item in enumerate(component_rows)
+    ]
+    normalized_component_urls = component_urls(normalized_components)
+    primary_urls = {normalized_base, normalized_api} - {None}
+    if len(set(normalized_component_urls)) != len(normalized_component_urls) or any(
+        url in primary_urls for url in normalized_component_urls
+    ):
+        raise TargetPolicyError("Cada componente deve possuir uma URL única.")
+    hosts = configured_hosts(normalized)
     public = False
     private = False
     for url in normalized:
@@ -66,12 +83,10 @@ def registration_scope(
         raise TargetPolicyError("Não combine hosts públicos e privados no mesmo alvo.")
     if public and any(normalize_target_url(url).scheme != "https" for url in normalized):
         raise TargetPolicyError("Alvos públicos exigem HTTPS.")
-    return normalized[0], normalized[1] if len(normalized) > 1 else None, hosts, public
+    return normalized_base, normalized_api, normalized_components, hosts, public
 
 
-def verification_status(
-    target: Target, now: datetime | None = None
-) -> OwnershipVerificationStatus:
+def verification_status(target: Target, now: datetime | None = None) -> OwnershipVerificationStatus:
     if not target.requires_ownership_verification:
         return "NOT_REQUIRED"
     if target.ownership_verified_at is None or target.ownership_verification_expires_at is None:
@@ -89,9 +104,7 @@ def verified_public_hosts(target: Target) -> tuple[str, ...]:
 
 def challenge_urls(target: Target) -> list[str]:
     result: list[str] = []
-    for raw_url in [target.base_url, target.api_url]:
-        if not raw_url:
-            continue
+    for raw_url in target_urls(target):
         parts = urlsplit(raw_url)
         value = urlunsplit((parts.scheme, parts.netloc, CHALLENGE_PATH, "", ""))
         if value not in result:

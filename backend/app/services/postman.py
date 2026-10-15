@@ -9,6 +9,7 @@ from app.crawler.normalizer import URLNormalizationError, normalize_method, norm
 from app.models import Target
 from app.models.enums import DiscoverySource, ResourceType
 from app.services.ownership import verified_public_hosts
+from app.services.target_components import target_urls
 
 MAX_COLLECTION_BYTES = 2_000_000
 MAX_REQUESTS = 2_000
@@ -186,9 +187,7 @@ def parse_postman_collection(
     version = _collection_version(info.get("schema"))
     name = _clean_name(info.get("name"), "Coleção sem nome")
     fallback = target.api_url or target.base_url
-    allowed_origins = {normalize_url(target.base_url).origin}
-    if target.api_url:
-        allowed_origins.add(normalize_url(target.api_url).origin)
+    allowed_origins = {normalize_url(url).origin for url in target_urls(target)}
     values = _variables(document)
     operations: list[PostmanOperation] = []
 

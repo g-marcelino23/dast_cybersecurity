@@ -42,6 +42,7 @@ from app.services.analysis import sanitize_resource
 from app.services.authentication import Authenticator, ephemeral_auth_sessions
 from app.services.ownership import verified_public_hosts
 from app.services.response_signatures import StructuralSnapshot, structural_snapshot
+from app.services.target_components import target_urls
 
 logger = logging.getLogger(__name__)
 PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -491,9 +492,7 @@ class AuthorizationService:
             if location:
                 absolute = urljoin(tested.endpoint, location)
                 validated = validate_target(absolute, verified_public_hosts(target))
-                allowed_origins = {normalize_url(target.base_url).origin}
-                if target.api_url:
-                    allowed_origins.add(normalize_url(target.api_url).origin)
+                allowed_origins = {normalize_url(url).origin for url in target_urls(target)}
                 if normalize_url(str(validated.url)).origin not in allowed_origins:
                     return (
                         AuthorizationProbeResult.ERROR,

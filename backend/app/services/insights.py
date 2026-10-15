@@ -58,6 +58,7 @@ from app.schemas.entities import (
     TargetHealthRead,
 )
 from app.services.ownership import verified_public_hosts
+from app.services.target_components import target_urls
 
 IDENTIFIER_SEGMENT = re.compile(
     r"^(?:\d+|[0-9a-f]{8}-[0-9a-f-]{27,}|[0-9a-f]{16,})$", re.IGNORECASE
@@ -90,12 +91,22 @@ class TargetHealthService:
         allowed_hosts = verified_public_hosts(target)
         frontend = self._component(target.base_url, allowed_hosts)
         api = self._component(target.api_url, allowed_hosts) if target.api_url else None
-        available = frontend.status == "ONLINE" and (api is None or api.status == "ONLINE")
+        additional = [
+            self._component(url, allowed_hosts)
+            for url in target_urls(target)
+            if url not in {target.base_url, target.api_url}
+        ]
+        available = (
+            frontend.status == "ONLINE"
+            and (api is None or api.status == "ONLINE")
+            and all(item.status == "ONLINE" for item in additional)
+        )
         return TargetHealthRead(
             target_id=target.id,
             available=available,
             frontend=frontend,
             api=api,
+            components=additional,
             message="Target available" if available else "Target unavailable",
             code="AVAILABLE" if available else "TARGET_UNAVAILABLE",
         )

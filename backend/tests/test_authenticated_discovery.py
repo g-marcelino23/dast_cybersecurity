@@ -153,7 +153,7 @@ def run_profile_scan(db: Session, target: Target, profile: AuthProfile, label: s
         target_id=target.id,
         auth_profile_id=profile.id,
         experiment_label=label,
-        dast_version="0.23.0",
+        dast_version="0.24.0",
         modules_enabled=["discovery", "sensitive_data"],
         configuration_snapshot={"safe_scan_mode": True},
     )
@@ -171,9 +171,7 @@ def run_profile_scan(db: Session, target: Target, profile: AuthProfile, label: s
 def test_authenticated_discovery_creates_sanitized_role_snapshot(db: Session) -> None:
     target, doctor, _patient = seed(db)
     scan = run_profile_scan(db, target, doctor, "MEDICO_A_DISCOVERY_001")
-    snapshot = db.scalar(
-        select(RoleSurfaceSnapshot).where(RoleSurfaceSnapshot.scan_id == scan.id)
-    )
+    snapshot = db.scalar(select(RoleSurfaceSnapshot).where(RoleSurfaceSnapshot.scan_id == scan.id))
     assert scan.status == ScanStatus.COMPLETED
     assert snapshot is not None
     assert snapshot.auth_profile_id == doctor.id
@@ -236,9 +234,7 @@ def test_candidate_generation_is_read_only_suggested_and_idempotent(db: Session)
     assert all(item.confidence.value == "LOW" for item in created)
     assert generate_authorization_candidates(db, target.id, doctor.id, patient.id) == []
     assert (
-        db.scalar(
-            select(AuthorizationCandidate).where(AuthorizationCandidate.method == "POST")
-        )
+        db.scalar(select(AuthorizationCandidate).where(AuthorizationCandidate.method == "POST"))
         is None
     )
 

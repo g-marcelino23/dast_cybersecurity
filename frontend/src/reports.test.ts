@@ -8,7 +8,7 @@ const scan = {
   id: 59,
   target_id: 6,
   status: 'COMPLETED',
-  dast_version: '0.23.0',
+  dast_version: '0.24.0',
   configuration_snapshot: {},
 } as Scan
 

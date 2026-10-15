@@ -10,6 +10,7 @@ from app.crawler.normalizer import normalize_url
 from app.models import Target
 from app.models.enums import DiscoverySource, ResourceType
 from app.services.ownership import verified_public_hosts
+from app.services.target_components import target_urls
 
 MAX_SPEC_BYTES = 2_000_000
 MAX_PATHS = 500
@@ -94,13 +95,11 @@ def _server_url(document: dict[str, object], target: Target, is_swagger: bool) -
         raise OpenApiImportError(
             "O servidor declarado no OpenAPI não é um alvo permitido."
         ) from exc
-    allowed_origins = {normalize_url(target.base_url).origin}
-    if target.api_url:
-        allowed_origins.add(normalize_url(target.api_url).origin)
+    allowed_origins = {normalize_url(url).origin for url in target_urls(target)}
     if normalized.origin not in allowed_origins:
         raise OpenApiImportError(
             "O servidor declarado no OpenAPI precisa usar a origem do frontend "
-            "ou da API cadastrada."
+            "ou de um componente cadastrado."
         )
     return normalized.url
 
@@ -152,9 +151,7 @@ def parse_openapi(
             if not operation:
                 continue
             tags = [
-                str(tag)[:80]
-                for tag in _sequence(operation.get("tags"))
-                if isinstance(tag, str)
+                str(tag)[:80] for tag in _sequence(operation.get("tags")) if isinstance(tag, str)
             ]
             security = operation.get("security", global_security)
             operations.append(

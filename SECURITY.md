@@ -20,7 +20,7 @@ versão afetada.
 
 ## Limite de implantação
 
-A versão 0.23.0 é uma aplicação local para demonstração e pesquisa. Exposição em
+A versão 0.24.0 é uma aplicação local para demonstração e pesquisa. Exposição em
 rede ou operação multiusuário exige, antes, autenticação da plataforma, RBAC,
 TLS, fila de jobs persistente, gestão centralizada de segredos, auditoria,
 monitoramento e política de backup/restauração.

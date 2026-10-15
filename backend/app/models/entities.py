@@ -46,6 +46,7 @@ class Target(Base):
     name: Mapped[str] = mapped_column(String(120))
     base_url: Mapped[str] = mapped_column(String(2048))
     api_url: Mapped[str | None] = mapped_column(String(2048))
+    components: Mapped[list[dict[str, str]]] = mapped_column(JsonDocument, default=list)
     description: Mapped[str | None] = mapped_column(Text)
     environment: Mapped[TargetEnvironment] = mapped_column(
         Enum(TargetEnvironment), default=TargetEnvironment.LOCAL
@@ -108,7 +109,7 @@ class Scan(Base):
     status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus), default=ScanStatus.PENDING)
     mode: Mapped[ScanMode] = mapped_column(Enum(ScanMode), default=ScanMode.DISCOVERY_PASSIVE)
     experiment_label: Mapped[str | None] = mapped_column(String(160), index=True)
-    dast_version: Mapped[str] = mapped_column(String(32), default="0.23.0")
+    dast_version: Mapped[str] = mapped_column(String(32), default="0.24.0")
     modules_enabled: Mapped[list[str]] = mapped_column(JsonDocument, default=list)
     configuration_snapshot: Mapped[dict[str, object]] = mapped_column(JsonDocument, default=dict)
     preset: Mapped[str] = mapped_column(String(32), default="PASSIVE")

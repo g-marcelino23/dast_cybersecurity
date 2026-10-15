@@ -109,6 +109,19 @@ def test_scope_blocks_external_navigation_and_revalidates_dns():
         assert not named.allows_request("http://clinic.internal/page", "document")
 
 
+def test_scope_allows_registered_web_components_only_for_navigation():
+    scope = CrawlerScope.from_target(
+        "http://localhost:5173",
+        "http://127.0.0.1:3001",
+        additional_urls=["http://localhost:8080", "http://127.0.0.1:9090"],
+        additional_navigation_urls=["http://localhost:8080"],
+    )
+
+    assert scope.can_navigate("http://localhost:8080/admin")
+    assert scope.allows_request("http://127.0.0.1:9090/worker", "fetch")
+    assert not scope.can_navigate("http://127.0.0.1:9090/worker")
+
+
 def test_scope_pins_reachable_ipv6_for_localhost_without_api_overwrite():
     connection = Mock()
 

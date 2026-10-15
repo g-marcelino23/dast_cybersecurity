@@ -66,6 +66,7 @@ describe('API client', () => {
       name: 'x',
       base_url: 'https://example.test',
       api_url: null,
+      components: [],
       description: null,
       environment: 'LOCAL',
       is_protected_target: false,

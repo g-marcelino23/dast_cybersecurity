@@ -18,6 +18,7 @@ from app.crawler.normalizer import normalize_url
 from app.models import AuthProfile, Target
 from app.models.enums import AuthType
 from app.services.ownership import verified_public_hosts
+from app.services.target_components import target_urls
 
 logger = logging.getLogger(__name__)
 DIRECT_AUTH_TYPES = {
@@ -96,9 +97,7 @@ ephemeral_auth_sessions = EphemeralAuthSessions()
 def ensure_auth_url_in_target_scope(raw_url: str, target: Target) -> str:
     validated = validate_target(raw_url, verified_public_hosts(target))
     normalized = normalize_url(str(validated.url))
-    configured_origins = {normalize_url(target.base_url).origin}
-    if target.api_url:
-        configured_origins.add(normalize_url(target.api_url).origin)
+    configured_origins = {normalize_url(url).origin for url in target_urls(target)}
     if normalized.origin not in configured_origins:
         raise AuthenticationError("A URL de autenticação deve pertencer ao alvo configurado.")
     return str(validated.url)
@@ -225,8 +224,7 @@ class Authenticator:
         else:
             template = profile.header_template or {}
             requires_secret = any(
-                isinstance(value, str) and "{{secret}}" in value
-                for value in template.values()
+                isinstance(value, str) and "{{secret}}" in value for value in template.values()
             )
             if requires_secret and not secret:
                 raise AuthenticationError("Secret is required for this authentication attempt.")
@@ -445,9 +443,7 @@ class Authenticator:
                             headers=httpx.Headers(response.headers),
                             body=b"".join(chunks),
                             cookies=dict(response.cookies),
-                            browser_cookies=self._browser_cookies(
-                                response.headers, validated.url
-                            ),
+                            browser_cookies=self._browser_cookies(response.headers, validated.url),
                         )
             except httpx.ConnectError as exc:
                 last_error = exc

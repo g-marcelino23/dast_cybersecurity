@@ -23,11 +23,19 @@ from app.models.enums import (
 )
 
 
+class TargetComponent(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    name: str = Field(min_length=1, max_length=80)
+    kind: Literal["WEB", "API", "SERVICE"]
+    url: str = Field(min_length=1, max_length=2048)
+
+
 class TargetCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     name: str = Field(min_length=1, max_length=120)
     base_url: str = Field(min_length=1, max_length=2048)
     api_url: str | None = Field(default=None, max_length=2048)
+    components: list[TargetComponent] = Field(default_factory=list, max_length=20)
     description: str | None = Field(default=None, max_length=4000)
     environment: TargetEnvironment = TargetEnvironment.LOCAL
     is_protected_target: bool = False
@@ -420,6 +428,7 @@ class TargetHealthRead(BaseModel):
     available: bool
     frontend: TargetComponentHealth
     api: TargetComponentHealth | None
+    components: list[TargetComponentHealth]
     message: str
     code: Literal["AVAILABLE", "TARGET_UNAVAILABLE"]
 

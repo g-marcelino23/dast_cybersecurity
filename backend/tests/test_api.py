@@ -129,12 +129,25 @@ def test_public_target_requires_and_completes_ownership_verification(client):
     with patch("app.services.ownership.validate_target", side_effect=public_target):
         created = client.post(
             "/targets",
-            json={"name": "Public app", "base_url": "https://app.example.test"},
+            json={
+                "name": "Public app",
+                "base_url": "https://app.example.test",
+                "components": [
+                    {
+                        "name": "Admin",
+                        "kind": "WEB",
+                        "url": "https://admin.example.test",
+                    }
+                ],
+            },
         )
     assert created.status_code == 201
     target = created.json()
     assert target["ownership_verification_status"] == "PENDING"
-    assert target["allowed_hosts"] == ["app.example.test"]
+    assert target["allowed_hosts"] == ["app.example.test", "admin.example.test"]
+    assert target["components"] == [
+        {"name": "Admin", "kind": "WEB", "url": "https://admin.example.test"}
+    ]
     assert client.post("/scans", json={"target_id": target["id"]}).status_code == 422
 
     token = target["ownership_verification_token"]
@@ -155,6 +168,63 @@ def test_public_target_requires_and_completes_ownership_verification(client):
     assert verified.status_code == 200
     assert verified.json()["status"] == "VERIFIED"
     assert client.post("/scans", json={"target_id": target["id"]}).status_code == 201
+
+
+def test_scan_collects_all_registered_components(client):
+    created = client.post(
+        "/targets",
+        json={
+            "name": "Multi component",
+            "base_url": "http://localhost:5173",
+            "api_url": "http://127.0.0.1:3001",
+            "components": [
+                {"name": "Admin", "kind": "WEB", "url": "http://localhost:8080"},
+                {
+                    "name": "Worker",
+                    "kind": "SERVICE",
+                    "url": "http://127.0.0.1:9090",
+                },
+            ],
+        },
+    )
+    assert created.status_code == 201
+    target = created.json()
+    scan = client.post("/scans", json={"target_id": target["id"]}).json()
+
+    def collected(url, *_args, **_kwargs):
+        return ResponseSnapshot(url, 200, httpx.Headers({"content-type": "text/html"}), b"")
+
+    with (
+        patch("app.scanner.client.SafeHttpCollector.fetch", side_effect=collected) as fetch,
+        patch(
+            "app.services.scans.DiscoveryCrawler.crawl",
+            return_value=DiscoveryResult.empty(),
+        ) as crawl,
+    ):
+        completed = client.post(f"/scans/{scan['id']}/run")
+
+    assert completed.status_code == 200
+    assert [call.args[0] for call in fetch.call_args_list] == [
+        "http://localhost:5173",
+        "http://127.0.0.1:3001",
+        "http://localhost:8080",
+        "http://127.0.0.1:9090",
+    ]
+    assert crawl.call_args.kwargs["additional_navigation_urls"] == ["http://localhost:8080"]
+
+
+def test_target_rejects_duplicate_component_urls(client):
+    response = client.post(
+        "/targets",
+        json={
+            "name": "Duplicate",
+            "base_url": "http://localhost:5173",
+            "components": [{"name": "Same", "kind": "WEB", "url": "http://localhost:5173"}],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "URL única" in response.text
 
 
 def test_duplicate_url_is_collected_once():

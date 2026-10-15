@@ -182,14 +182,17 @@ def list_targets(db: Db, limit: Limit = 100, offset: Offset = 0) -> list[Target]
 @router.post("/targets", response_model=TargetRead, status_code=201)
 def create_target(payload: TargetCreate, db: Db) -> Target:
     try:
-        base_url, api_url, allowed_hosts, public = registration_scope(
-            payload.base_url, payload.api_url
+        base_url, api_url, components, allowed_hosts, public = registration_scope(
+            payload.base_url,
+            payload.api_url,
+            [item.model_dump() for item in payload.components],
         )
     except TargetPolicyError as exc:
         raise HTTPException(422, str(exc)) from exc
     values = payload.model_dump() | {
         "base_url": base_url,
         "api_url": api_url,
+        "components": components,
         "allowed_hosts": allowed_hosts,
         "requires_ownership_verification": public,
         "ownership_verification_token": new_verification_token() if public else None,
