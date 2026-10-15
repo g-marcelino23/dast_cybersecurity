@@ -24,7 +24,7 @@
 
 ## Segurança e privacidade
 
-- [ ] Nenhum segredo real está no Git ou nos relatórios.
+- [x] Nenhum segredo real está no Git ou nos relatórios.
 - [x] `.env`, bancos, logs, runtime e `node_modules` continuam ignorados.
 - [x] Um domínio público não verificado permanece bloqueado.
 - [x] Redirect externo e resolução privada/mista permanecem bloqueados.
@@ -33,7 +33,7 @@
 ## Entrega
 
 - [x] README corresponde às funcionalidades atuais.
-- [ ] O repositório está limpo e o commit de entrega foi revisado.
+- [x] O repositório está limpo e o commit de entrega foi revisado.
 - [x] A versão está alinhada no backend, frontend e interface.
 - [ ] A tag `v0.25.0` aponta para o commit aprovado.
-- [ ] Uma cópia do banco de demonstração, se usada, contém somente dados sintéticos.
+- [x] Nenhuma cópia de banco de demonstração integra a entrega.
