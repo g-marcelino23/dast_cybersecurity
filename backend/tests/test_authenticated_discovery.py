@@ -153,7 +153,7 @@ def run_profile_scan(db: Session, target: Target, profile: AuthProfile, label: s
         target_id=target.id,
         auth_profile_id=profile.id,
         experiment_label=label,
-        dast_version="0.20.0",
+        dast_version="0.21.0",
         modules_enabled=["discovery", "sensitive_data"],
         configuration_snapshot={"safe_scan_mode": True},
     )

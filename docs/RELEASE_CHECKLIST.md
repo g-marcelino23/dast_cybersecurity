@@ -3,7 +3,7 @@
 ## Qualidade automatizada
 
 - [x] `scripts/validate.ps1` termina sem erros.
-- [x] Os 183 testes backend passam em uma versão suportada do Python.
+- [x] Os 187 testes backend passam em uma versão suportada do Python.
 - [x] Os testes frontend passam.
 - [x] Ruff, mypy, ESLint e TypeScript não reportam erros.
 - [x] O build Vite é gerado.
@@ -33,7 +33,7 @@
 ## Entrega
 
 - [x] README corresponde às funcionalidades atuais.
-- [x] O repositório está limpo e o commit de entrega foi revisado.
+- [ ] O repositório está limpo e o commit de entrega foi revisado.
 - [x] A versão está alinhada no backend, frontend e interface.
-- [x] A tag `v0.20.0` aponta para o commit aprovado.
+- [ ] A tag `v0.21.0` aponta para o commit aprovado.
 - [ ] Uma cópia do banco de demonstração, se usada, contém somente dados sintéticos.

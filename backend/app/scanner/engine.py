@@ -9,8 +9,11 @@ from app.scanner.modules.cookies import CookiesModule
 from app.scanner.modules.cors import CorsModule
 from app.scanner.modules.csp import ContentSecurityPolicyModule
 from app.scanner.modules.error_disclosure import ErrorDisclosureModule
+from app.scanner.modules.mixed_content import MixedContentModule
+from app.scanner.modules.redirects import RedirectsModule
 from app.scanner.modules.security_headers import SecurityHeadersModule
 from app.scanner.modules.server_disclosure import ServerDisclosureModule
+from app.scanner.modules.tls import TlsModule
 from app.schemas.entities import FindingDraft
 
 
@@ -32,6 +35,9 @@ class ScannerEngine:
             ContentSecurityPolicyModule(),
             CacheControlModule(),
             ErrorDisclosureModule(),
+            TlsModule(),
+            MixedContentModule(),
+            RedirectsModule(),
         )
 
     def run(

@@ -14,6 +14,8 @@ class ResponseSnapshot:
     headers: httpx.Headers
     body: bytes | None = None
     method: str = "GET"
+    tls_version: str | None = None
+    tls_cipher: str | None = None
 
     @property
     def is_html(self) -> bool:

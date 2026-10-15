@@ -9,6 +9,20 @@ from app.crawler.browser import AuthContext
 from app.scanner.base import ResponseSnapshot
 
 
+def _tls_metadata(response: httpx.Response) -> tuple[str | None, str | None]:
+    stream = response.extensions.get("network_stream")
+    extra_info = getattr(stream, "get_extra_info", None)
+    if not callable(extra_info):
+        return None, None
+    ssl_object = extra_info("ssl_object")
+    if ssl_object is None:
+        return None, None
+    version = ssl_object.version()
+    cipher_details = ssl_object.cipher()
+    cipher = cipher_details[0] if cipher_details else None
+    return version, cipher
+
+
 class SafeHttpCollector:
     """Pinned, no-proxy HTTP collection with no redirect following."""
 
@@ -88,6 +102,7 @@ class SafeHttpCollector:
                         cookies=auth_cookies,
                         extensions={"sni_hostname": url.host},
                     ) as response:
+                        tls_version, tls_cipher = _tls_metadata(response)
                         chunks: list[bytes] = []
                         content_type = response.headers.get("content-type", "").lower()
                         declared = response.headers.get("content-length", "")
@@ -109,6 +124,8 @@ class SafeHttpCollector:
                             headers=httpx.Headers(response.headers),
                             body=b"".join(chunks) or None,
                             method=normalized_method,
+                            tls_version=tls_version,
+                            tls_cipher=tls_cipher,
                         )
             except httpx.ConnectError as exc:
                 last_error = exc

@@ -37,6 +37,39 @@ def test_pins_ip_preserves_host_and_tls_sni():
     assert "secret" not in response.endpoint
 
 
+def test_collector_captures_tls_metadata_when_transport_exposes_it():
+    class FakeSslObject:
+        def version(self):
+            return "TLSv1.3"
+
+        def cipher(self):
+            return ("TLS_AES_256_GCM_SHA384", "TLSv1.3", 256)
+
+    class FakeNetworkStream:
+        def get_extra_info(self, name):
+            return FakeSslObject() if name == "ssl_object" else None
+
+    real_client = httpx.Client
+
+    def handler(_request):
+        return httpx.Response(
+            200,
+            extensions={"network_stream": FakeNetworkStream()},
+        )
+
+    def client_factory(**kwargs):
+        return real_client(transport=httpx.MockTransport(handler), **kwargs)
+
+    answers = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.7", 443))]
+    with (
+        patch("socket.getaddrinfo", return_value=answers),
+        patch("app.scanner.client.httpx.Client", side_effect=client_factory),
+    ):
+        response = SafeHttpCollector().fetch("https://clinic.test/")
+    assert response.tls_version == "TLSv1.3"
+    assert response.tls_cipher == "TLS_AES_256_GCM_SHA384"
+
+
 def test_revalidation_blocks_dns_rebinding_before_connection():
     with (
         patch(

@@ -9,8 +9,11 @@ from app.scanner.modules.cookies import CookiesModule
 from app.scanner.modules.cors import CorsModule
 from app.scanner.modules.csp import ContentSecurityPolicyModule
 from app.scanner.modules.error_disclosure import ErrorDisclosureModule
+from app.scanner.modules.mixed_content import MixedContentModule
+from app.scanner.modules.redirects import RedirectsModule
 from app.scanner.modules.security_headers import SecurityHeadersModule
 from app.scanner.modules.server_disclosure import ServerDisclosureModule
+from app.scanner.modules.tls import TlsModule
 
 
 def snapshot(headers=None, endpoint="http://localhost/", status=200):
@@ -171,3 +174,86 @@ def test_stack_trace_signature_is_reported_without_body_evidence():
     finding = ErrorDisclosureModule().scan(response)[0]
     assert finding.cwe == "CWE-209"
     assert "secret-internal-value" not in finding.model_dump_json()
+
+
+def test_tls_module_reports_only_observed_obsolete_protocols_and_weak_ciphers():
+    response = ResponseSnapshot(
+        "https://localhost/",
+        200,
+        httpx.Headers(),
+        tls_version="TLSv1.1",
+        tls_cipher="TLS_RSA_WITH_3DES_EDE_CBC_SHA",
+    )
+    findings = TlsModule().scan(response)
+    assert {finding.title for finding in findings} == {
+        "Versão TLS obsoleta observada",
+        "Cifra TLS fraca observada",
+    }
+    assert all(finding.cwe == "CWE-326" for finding in findings)
+    assert TlsModule().scan(
+        ResponseSnapshot(
+            "https://localhost/",
+            200,
+            httpx.Headers(),
+            tls_version="TLSv1.3",
+            tls_cipher="TLS_AES_256_GCM_SHA384",
+        )
+    ) == []
+    assert TlsModule().scan(snapshot(endpoint="https://localhost/")) == []
+
+
+def test_mixed_content_reports_counts_without_persisting_destinations():
+    body = b"""<html><head>
+      <script src="http://assets.example.test/private.js"></script>
+      <style>body { background: url('http://cdn.example.test/private.png') }</style>
+      </head><body><img srcset="https://safe.test/a.png 1x, http://bad.test/b.png 2x">
+      <a href="http://navigation.example.test/allowed">navigation is not a subresource</a>
+      </body></html>"""
+    response = ResponseSnapshot(
+        "https://localhost/", 200, httpx.Headers({"Content-Type": "text/html"}), body
+    )
+    finding = MixedContentModule().scan(response)[0]
+    assert finding.cwe == "CWE-319"
+    assert "3 referência(s)" in finding.evidence
+    assert "img" in finding.evidence and "script" in finding.evidence
+    assert "example.test" not in finding.model_dump_json()
+    assert MixedContentModule().scan(
+        ResponseSnapshot(
+            "http://localhost/", 200, httpx.Headers({"Content-Type": "text/html"}), body
+        )
+    ) == []
+
+
+def test_redirect_module_distinguishes_external_downgrade_and_relative_redirects():
+    module = RedirectsModule()
+    assert module.scan(
+        snapshot({"Location": "/login"}, endpoint="https://localhost/", status=302)
+    ) == []
+    external = module.scan(
+        snapshot(
+            {"Location": "https://login.example.test/path?token=secret"},
+            endpoint="https://localhost/",
+            status=302,
+        )
+    )[0]
+    assert external.severity == Severity.INFO
+    assert "example.test" not in external.model_dump_json()
+    assert "secret" not in external.model_dump_json()
+    downgrade = module.scan(
+        snapshot(
+            {"Location": "http://localhost/insecure"},
+            endpoint="https://localhost/",
+            status=301,
+        )
+    )[0]
+    assert downgrade.cwe == "CWE-319"
+    assert downgrade.severity == Severity.MEDIUM
+    unsafe_scheme = module.scan(
+        snapshot(
+            {"Location": "javascript:alert('private')"},
+            endpoint="https://localhost/",
+            status=302,
+        )
+    )[0]
+    assert unsafe_scheme.cwe == "CWE-601"
+    assert "private" not in unsafe_scheme.model_dump_json()
