@@ -1,0 +1,124 @@
+from enum import StrEnum
+
+
+class ScanStatus(StrEnum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ScanMode(StrEnum):
+    DISCOVERY_PASSIVE = "DISCOVERY_PASSIVE"
+
+
+class TargetEnvironment(StrEnum):
+    LOCAL = "LOCAL"
+    FIXTURE = "FIXTURE"
+
+
+class AuthorizationRuleStatus(StrEnum):
+    SUGGESTED = "SUGGESTED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    DISABLED = "DISABLED"
+
+
+class AuthorizationScenarioExecutionStatus(StrEnum):
+    READY = "READY"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    INTERRUPTED = "INTERRUPTED"
+
+
+class Severity(StrEnum):
+    INFO = "INFO"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class Confidence(StrEnum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
+class PrivacyImpact(StrEnum):
+    NONE = "NONE"
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class DiscoverySource(StrEnum):
+    OPENAPI = "OPENAPI"
+    POSTMAN = "POSTMAN"
+    MANUAL_API = "MANUAL_API"
+    CRAWLER = "CRAWLER"
+    NETWORK = "NETWORK"
+    HTML = "HTML"
+    FORM = "FORM"
+    JAVASCRIPT = "JAVASCRIPT"
+
+
+class ResourceType(StrEnum):
+    PAGE = "PAGE"
+    API = "API"
+    FORM = "FORM"
+    SCRIPT = "SCRIPT"
+    OTHER = "OTHER"
+
+
+class AuthType(StrEnum):
+    NONE = "NONE"
+    BEARER_LOGIN = "BEARER_LOGIN"
+    COOKIE_LOGIN = "COOKIE_LOGIN"
+    FORM_LOGIN = "FORM_LOGIN"
+    BASIC = "BASIC"
+    BEARER_TOKEN = "BEARER_TOKEN"
+    API_KEY = "API_KEY"
+    CUSTOM_HEADERS = "CUSTOM_HEADERS"
+
+
+class SensitiveDataCategory(StrEnum):
+    PERSONAL_IDENTIFIER = "PERSONAL_IDENTIFIER"
+    CONTACT_INFORMATION = "CONTACT_INFORMATION"
+    AUTHENTICATION_DATA = "AUTHENTICATION_DATA"
+    HEALTH_INFORMATION = "HEALTH_INFORMATION"
+    MEDICAL_RECORD = "MEDICAL_RECORD"
+    PRESCRIPTION = "PRESCRIPTION"
+    MEDICATION = "MEDICATION"
+    EXAM_RESULT = "EXAM_RESULT"
+    DIAGNOSIS = "DIAGNOSIS"
+    APPOINTMENT_INFORMATION = "APPOINTMENT_INFORMATION"
+    FINANCIAL_INFORMATION = "FINANCIAL_INFORMATION"
+    OTHER_SENSITIVE = "OTHER_SENSITIVE"
+
+
+class DetectorType(StrEnum):
+    FIELD_NAME = "FIELD_NAME"
+    CPF_PATTERN = "CPF_PATTERN"
+    EMAIL_PATTERN = "EMAIL_PATTERN"
+    PHONE_PATTERN = "PHONE_PATTERN"
+
+
+class ExpectedAccess(StrEnum):
+    ALLOW = "ALLOW"
+    DENY = "DENY"
+    CONDITIONAL = "CONDITIONAL"
+    UNKNOWN = "UNKNOWN"
+
+
+class AuthorizationProbeResult(StrEnum):
+    ALLOWED_AS_EXPECTED = "ALLOWED_AS_EXPECTED"
+    DENIED_AS_EXPECTED = "DENIED_AS_EXPECTED"
+    POSSIBLE_BYPASS = "POSSIBLE_BYPASS"
+    CONFIRMED_BYPASS = "CONFIRMED_BYPASS"
+    INCONCLUSIVE = "INCONCLUSIVE"
+    ERROR = "ERROR"
+    SKIPPED = "SKIPPED"
