@@ -40,6 +40,7 @@ from app.services.insights import (
     login_suggestions,
     privacy_analysis,
     sanitize_resource,
+    scan_comparison,
     sensitive_surface,
     suggest_rules,
 )
@@ -176,9 +177,7 @@ def test_access_and_sensitive_surface_are_observations_not_policy(db: Session) -
 
 def test_rule_assistant_creates_only_disabled_suggestions(db: Session) -> None:
     target, _owner, tested, _scan = seed_surface(db)
-    tested_scan = Scan(
-        target_id=target.id, auth_profile_id=tested.id, status=ScanStatus.COMPLETED
-    )
+    tested_scan = Scan(target_id=target.id, auth_profile_id=tested.id, status=ScanStatus.COMPLETED)
     db.add(tested_scan)
     db.commit()
     rules = suggest_rules(db, target.id)
@@ -230,9 +229,7 @@ def test_only_approved_rule_can_produce_preview(
     assert plan.methods == ["GET"]
     assert plan.mutating_requests == 0
     assert plan.target_scope == "LOCAL_PRIVATE"
-    assert plan.request_urls == [
-        "http://localhost:3001/api/patients/{id}/medical-record"
-    ]
+    assert plan.request_urls == ["http://localhost:3001/api/patients/{id}/medical-record"]
 
 
 def test_login_detection_is_passive_and_requires_confirmation(db: Session) -> None:
@@ -304,6 +301,123 @@ def test_urls_are_sanitized_without_query_or_identifiers() -> None:
     )
     assert value == "/api/patients/{id}/records/{id}"
     assert "secret" not in value
+
+
+def test_scan_comparison_classifies_findings_and_endpoints(db: Session) -> None:
+    target, owner, _tested, baseline = seed_surface(db)
+    current = Scan(
+        target_id=target.id,
+        auth_profile_id=owner.id,
+        status=ScanStatus.COMPLETED,
+    )
+    db.add(current)
+    db.flush()
+    db.add_all(
+        [
+            Finding(
+                scan_id=baseline.id,
+                title="Persistente",
+                description="fixture",
+                endpoint="/shared/123?token=secret",
+                severity=Severity.MEDIUM,
+                confidence=Confidence.HIGH,
+                cwe="CWE-1004",
+                privacy_impact=PrivacyImpact.NONE,
+                evidence="sanitized",
+                recommendation="fix",
+                issue_key="headers:CWE-1004:/shared/{id}",
+            ),
+            Finding(
+                scan_id=current.id,
+                title="Persistente",
+                description="fixture",
+                endpoint="/shared/456?token=other",
+                severity=Severity.MEDIUM,
+                confidence=Confidence.HIGH,
+                cwe="CWE-1004",
+                privacy_impact=PrivacyImpact.NONE,
+                evidence="sanitized",
+                recommendation="fix",
+                issue_key="headers:CWE-1004:/shared/{id}",
+            ),
+            Finding(
+                scan_id=baseline.id,
+                title="Resolvido",
+                description="fixture",
+                endpoint="/old",
+                severity=Severity.LOW,
+                confidence=Confidence.HIGH,
+                cwe="CWE-16",
+                privacy_impact=PrivacyImpact.NONE,
+                evidence="sanitized",
+                recommendation="fix",
+            ),
+            Finding(
+                scan_id=current.id,
+                title="Novo",
+                description="fixture",
+                endpoint="/new",
+                severity=Severity.HIGH,
+                confidence=Confidence.HIGH,
+                cwe="CWE-319",
+                privacy_impact=PrivacyImpact.NONE,
+                evidence="sanitized",
+                recommendation="fix",
+            ),
+            DiscoveredEndpoint(
+                scan_id=current.id,
+                url="http://localhost:3001/api/patients/456/medical-record",
+                path="/api/patients/456/medical-record",
+                method="GET",
+                source=DiscoverySource.NETWORK,
+                resource_type=ResourceType.API,
+            ),
+            DiscoveredEndpoint(
+                scan_id=current.id,
+                url="http://localhost:3001/api/new",
+                path="/api/new",
+                method="POST",
+                source=DiscoverySource.OPENAPI,
+                resource_type=ResourceType.API,
+            ),
+            DiscoveredEndpoint(
+                scan_id=baseline.id,
+                url="http://localhost:3001/old",
+                path="/old",
+                method="GET",
+                source=DiscoverySource.CRAWLER,
+                resource_type=ResourceType.PAGE,
+            ),
+        ]
+    )
+    db.commit()
+
+    result = scan_comparison(db, target.id, baseline.id, current.id)
+
+    assert [item.title for item in result.new_findings] == ["Novo"]
+    assert [item.title for item in result.resolved_findings] == ["Resolvido"]
+    assert [item.title for item in result.persistent_findings] == ["Persistente"]
+    assert result.persistent_findings[0].endpoint == "/shared/{id}"
+    assert [(item.method, item.path) for item in result.added_endpoints] == [("POST", "/api/new")]
+    assert [(item.method, item.path) for item in result.removed_endpoints] == [("GET", "/old")]
+
+
+def test_scan_comparison_rejects_invalid_pairs(db: Session) -> None:
+    target, _owner, _tested, completed = seed_surface(db)
+    pending = Scan(target_id=target.id, status=ScanStatus.PENDING)
+    other_target = Target(name="Other", base_url="http://localhost:8080")
+    db.add_all([pending, other_target])
+    db.flush()
+    other_scan = Scan(target_id=other_target.id, status=ScanStatus.COMPLETED)
+    db.add(other_scan)
+    db.commit()
+
+    with pytest.raises(ValueError, match="dois scans diferentes"):
+        scan_comparison(db, target.id, completed.id, completed.id)
+    with pytest.raises(ValueError, match="dois scans concluídos"):
+        scan_comparison(db, target.id, completed.id, pending.id)
+    with pytest.raises(ValueError, match="alvo informado"):
+        scan_comparison(db, target.id, completed.id, other_scan.id)
 
 
 def test_authorization_run_requires_explicit_confirmation(client) -> None:

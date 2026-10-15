@@ -734,6 +734,30 @@ class ScanSummary(BaseModel):
     safe_scan_mode: bool
 
 
+class ScanComparisonFinding(BaseModel):
+    title: str
+    cwe: str
+    severity: Severity
+    endpoint: str
+
+
+class ScanComparisonEndpoint(BaseModel):
+    method: str
+    path: str
+    resource_type: ResourceType
+
+
+class ScanComparison(BaseModel):
+    target_id: int
+    baseline_scan_id: int
+    current_scan_id: int
+    new_findings: list[ScanComparisonFinding]
+    resolved_findings: list[ScanComparisonFinding]
+    persistent_findings: list[ScanComparisonFinding]
+    added_endpoints: list[ScanComparisonEndpoint]
+    removed_endpoints: list[ScanComparisonEndpoint]
+
+
 class PrivacyAnalysis(BaseModel):
     target_id: int
     sensitive_endpoints: int

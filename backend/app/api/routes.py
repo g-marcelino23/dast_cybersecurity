@@ -72,6 +72,7 @@ from app.schemas.entities import (
     PrivacyAnalysis,
     RoleComparison,
     RoleSurfaceSnapshotRead,
+    ScanComparison,
     ScanCreate,
     ScanModuleRead,
     ScanRead,
@@ -96,6 +97,7 @@ from app.services.analysis import (
     login_suggestions,
     privacy_analysis,
     role_comparison,
+    scan_comparison,
     scan_summary,
     sensitive_surface,
     suggest_rules,
@@ -218,9 +220,7 @@ def _ownership_read(target: Target) -> OwnershipVerificationRead:
     )
 
 
-@router.get(
-    "/targets/{target_id}/ownership-verification", response_model=OwnershipVerificationRead
-)
+@router.get("/targets/{target_id}/ownership-verification", response_model=OwnershipVerificationRead)
 def get_ownership_verification(target_id: int, db: Db) -> OwnershipVerificationRead:
     return _ownership_read(require_target(db, target_id))
 
@@ -790,6 +790,23 @@ def get_scan_summary(scan_id: int, db: Db) -> ScanSummary:
         return scan_summary(db, scan_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+@router.get(
+    "/targets/{target_id}/scan-comparison",
+    response_model=ScanComparison,
+)
+def get_scan_comparison(
+    target_id: int,
+    baseline_scan_id: int,
+    current_scan_id: int,
+    db: Db,
+) -> ScanComparison:
+    require_target(db, target_id)
+    try:
+        return scan_comparison(db, target_id, baseline_scan_id, current_scan_id)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get(

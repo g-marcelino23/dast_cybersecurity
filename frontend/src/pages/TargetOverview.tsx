@@ -4,9 +4,9 @@ import { Link, useParams } from 'react-router-dom'
 import { api, errorMessage } from '../api'
 import { AccessProfileSurfaceView, RoleComparisonView } from '../components/AccessViews'
 import { Badge, Empty, ErrorBox, MethodBadge, PageTitle } from '../components/ui'
-import type { AccessProfileSurface, AccessSurface, ApiRequestBodyMode, ApiRequestTemplate, AuthorizationCandidate, AuthorizationPreview, AuthProfile, CweCoverage, PrivacyAnalysis, RoleComparison, Scan, ScanSummary, SensitiveSurface, Target, TargetHealth } from '../types'
+import type { AccessProfileSurface, AccessSurface, ApiRequestBodyMode, ApiRequestTemplate, AuthorizationCandidate, AuthorizationPreview, AuthProfile, CweCoverage, PrivacyAnalysis, RoleComparison, Scan, ScanComparison, ScanSummary, SensitiveSurface, Target, TargetHealth } from '../types'
 
-const tabs = ['Visão geral', 'OpenAPI', 'Postman', 'API manual', 'Discovery', 'Superfície de acesso', 'Comparação de perfis', 'Testes de autorização', 'Cobertura CWE', 'Dados sensíveis', 'Resumo do scan'] as const
+const tabs = ['Visão geral', 'OpenAPI', 'Postman', 'API manual', 'Discovery', 'Superfície de acesso', 'Comparação de perfis', 'Comparação de scans', 'Testes de autorização', 'Cobertura CWE', 'Dados sensíveis', 'Resumo do scan'] as const
 type Tab = typeof tabs[number]
 
 export function TargetOverview() {
@@ -27,6 +27,9 @@ export function TargetOverview() {
   const [candidates, setCandidates] = useState<AuthorizationCandidate[]>([])
   const [preview, setPreview] = useState<AuthorizationPreview | null>(null)
   const [summary, setSummary] = useState<ScanSummary | null>(null)
+  const [baselineScan, setBaselineScan] = useState('')
+  const [currentScan, setCurrentScan] = useState('')
+  const [scanComparison, setScanComparison] = useState<ScanComparison | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [openApiFile, setOpenApiFile] = useState<File | null>(null)
@@ -71,7 +74,29 @@ export function TargetOverview() {
     return () => { active = false }
   }, [id, profileA, profileB])
 
-  const selectedScan = useMemo(() => scans.find(scan => scan.status === 'COMPLETED' && scan.auth_profile_id === Number(profileA)) || scans.find(scan => scan.status === 'COMPLETED') || scans[0], [profileA, scans])
+  const completedScans = useMemo(() => scans.filter(scan => scan.status === 'COMPLETED').sort((a, b) => b.id - a.id), [scans])
+  const selectedScan = useMemo(() => completedScans.find(scan => scan.auth_profile_id === Number(profileA)) || completedScans[0] || scans[0], [completedScans, profileA, scans])
+
+  useEffect(() => {
+    if (completedScans.length < 2) {
+      setBaselineScan(''); setCurrentScan(''); setScanComparison(null); return
+    }
+    const ids = new Set(completedScans.map(scan => String(scan.id)))
+    if (!ids.has(currentScan)) setCurrentScan(String(completedScans[0].id))
+    if (!ids.has(baselineScan)) setBaselineScan(String(completedScans[1].id))
+  }, [baselineScan, completedScans, currentScan])
+
+  useEffect(() => {
+    if (!baselineScan || !currentScan || baselineScan === currentScan) {
+      setScanComparison(null); return
+    }
+    let active = true
+    api.scanComparison(id, Number(baselineScan), Number(currentScan))
+      .then(value => { if (active) setScanComparison(value) })
+      .catch(caught => { if (active) { setScanComparison(null); setError(errorMessage(caught)) } })
+    return () => { active = false }
+  }, [baselineScan, currentScan, id])
+
   useEffect(() => {
     if (!selectedScan) { setSummary(null); return }
     let active = true
@@ -193,6 +218,8 @@ export function TargetOverview() {
     {tab === 'Superfície de acesso' && <section className="panel"><h2>Superfície do perfil de acesso</h2>{profiles.length ? <><label>Perfil de acesso<select value={profileA} onChange={event => setProfileA(event.target.value)}>{profiles.map(profile => <option key={profile.id} value={profile.id}>{profile.name} · {profile.role_name}</option>)}</select></label><AccessProfileSurfaceView surface={roleSurface}/></> : <Empty title="Nenhum perfil de acesso configurado"/>}</section>}
 
     {tab === 'Comparação de perfis' && <section className="panel"><h2>Comparação de perfis</h2>{profiles.length >= 2 ? <RoleComparisonView profiles={profiles} profileA={profileA} profileB={profileB} comparison={comparison} candidates={candidates} busy={busy} onProfileA={setProfileA} onProfileB={setProfileB} onGenerate={() => void generateCandidates()}/> : <Empty title="São necessários pelo menos dois perfis de acesso"/>}</section>}
+
+    {tab === 'Comparação de scans' && <section className="panel detail-section"><h2>Comparação de scans</h2><p>Compare duas execuções concluídas do mesmo alvo. Identificadores e parâmetros sensíveis permanecem sanitizados.</p>{completedScans.length >= 2 ? <><div className="manual-api-form"><label>Baseline<select value={baselineScan} onChange={event => setBaselineScan(event.target.value)}>{completedScans.map(scan => <option key={scan.id} value={scan.id}>#{scan.id} · {scan.experiment_label || new Date(scan.finished_at || scan.created_at).toLocaleString('pt-BR')}</option>)}</select></label><label>Scan atual<select value={currentScan} onChange={event => setCurrentScan(event.target.value)}>{completedScans.map(scan => <option key={scan.id} value={scan.id}>#{scan.id} · {scan.experiment_label || new Date(scan.finished_at || scan.created_at).toLocaleString('pt-BR')}</option>)}</select></label></div>{baselineScan === currentScan ? <Empty title="Selecione dois scans diferentes"/> : scanComparison ? <><div className="scan-summary"><div><span>Novos achados</span><strong>{scanComparison.new_findings.length}</strong></div><div><span>Resolvidos</span><strong>{scanComparison.resolved_findings.length}</strong></div><div><span>Persistentes</span><strong>{scanComparison.persistent_findings.length}</strong></div><div><span>Endpoints adicionados</span><strong>{scanComparison.added_endpoints.length}</strong></div><div><span>Endpoints removidos</span><strong>{scanComparison.removed_endpoints.length}</strong></div></div><h3>Alterações em achados</h3>{[...scanComparison.new_findings.map(item => ({ ...item, state: 'NOVO' })), ...scanComparison.resolved_findings.map(item => ({ ...item, state: 'RESOLVIDO' })), ...scanComparison.persistent_findings.map(item => ({ ...item, state: 'PERSISTENTE' }))].length ? <div className="table-scroll"><table><thead><tr><th>Estado</th><th>Achado</th><th>CWE / severidade</th><th>Endpoint</th></tr></thead><tbody>{[...scanComparison.new_findings.map(item => ({ ...item, state: 'NOVO' })), ...scanComparison.resolved_findings.map(item => ({ ...item, state: 'RESOLVIDO' })), ...scanComparison.persistent_findings.map(item => ({ ...item, state: 'PERSISTENTE' }))].map((item, index) => <tr key={`${item.state}:${item.cwe}:${item.endpoint}:${index}`}><td><Badge value={item.state}/></td><td>{item.title}</td><td>{item.cwe} · <Badge value={item.severity}/></td><td><code>{item.endpoint}</code></td></tr>)}</tbody></table></div> : <Empty title="Nenhum achado nos scans selecionados"/>}<h3>Alterações na superfície</h3>{scanComparison.added_endpoints.length || scanComparison.removed_endpoints.length ? <div className="table-scroll"><table><thead><tr><th>Estado</th><th>Método</th><th>Caminho</th><th>Tipo</th></tr></thead><tbody>{[...scanComparison.added_endpoints.map(item => ({ ...item, state: 'ADICIONADO' })), ...scanComparison.removed_endpoints.map(item => ({ ...item, state: 'REMOVIDO' }))].map(item => <tr key={`${item.state}:${item.method}:${item.path}`}><td><Badge value={item.state}/></td><td><MethodBadge method={item.method}/></td><td><code>{item.path}</code></td><td>{item.resource_type}</td></tr>)}</tbody></table></div> : <Empty title="Nenhuma alteração na superfície descoberta"/>}</> : <Empty title="Carregando comparação…"/>}</> : <Empty title="São necessários pelo menos dois scans concluídos"/>}</section>}
 
     {tab === 'Testes de autorização' && <section className="panel"><h2>Preview dos testes de autorização</h2><p>Sugestões nunca são executadas automaticamente. Revisão humana e regra aprovada continuam obrigatórias.</p>{preview?.items.length ? <div className="table-scroll"><table><thead><tr><th>Proprietário → teste</th><th>Recurso</th><th>Esperado</th><th>Confiança</th><th>Estado</th></tr></thead><tbody>{preview.items.map(item => <tr key={item.scenario_id}><td>{item.owner_profile} → {item.test_profile}</td><td><MethodBadge method={item.method}/> <code>{item.resource}</code></td><td>{item.expected_access}</td><td>{item.confidence}</td><td><Badge value={item.executable ? 'READY' : 'REVIEW'}/></td></tr>)}</tbody></table></div> : <Empty title="Nenhum cenário de autorização revisado"/>}<p className="muted">Requisições mutáveis: 0 · confirmação explícita obrigatória.</p></section>}
 

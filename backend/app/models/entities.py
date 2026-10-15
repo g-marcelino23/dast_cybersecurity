@@ -108,7 +108,7 @@ class Scan(Base):
     status: Mapped[ScanStatus] = mapped_column(Enum(ScanStatus), default=ScanStatus.PENDING)
     mode: Mapped[ScanMode] = mapped_column(Enum(ScanMode), default=ScanMode.DISCOVERY_PASSIVE)
     experiment_label: Mapped[str | None] = mapped_column(String(160), index=True)
-    dast_version: Mapped[str] = mapped_column(String(32), default="0.21.0")
+    dast_version: Mapped[str] = mapped_column(String(32), default="0.22.0")
     modules_enabled: Mapped[list[str]] = mapped_column(JsonDocument, default=list)
     configuration_snapshot: Mapped[dict[str, object]] = mapped_column(JsonDocument, default=dict)
     preset: Mapped[str] = mapped_column(String(32), default="PASSIVE")

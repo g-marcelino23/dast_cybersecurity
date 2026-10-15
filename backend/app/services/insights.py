@@ -47,6 +47,9 @@ from app.schemas.entities import (
     PrivacyAnalysis,
     RoleComparison,
     RoleComparisonRow,
+    ScanComparison,
+    ScanComparisonEndpoint,
+    ScanComparisonFinding,
     ScanSummary,
     SensitiveSurfaceMatrix,
     SensitiveSurfaceRow,
@@ -350,29 +353,21 @@ def access_profile_surface(db: Session, profile_id: int) -> AccessProfileSurface
         .order_by(Scan.id.desc())
     )
     endpoints = (
-        list(
-            db.scalars(
-                select(DiscoveredEndpoint).where(DiscoveredEndpoint.scan_id == scan.id)
-            )
-        )
+        list(db.scalars(select(DiscoveredEndpoint).where(DiscoveredEndpoint.scan_id == scan.id)))
         if scan
         else []
     )
     observations = (
         list(
             db.scalars(
-                select(SensitiveDataObservation).where(
-                    SensitiveDataObservation.scan_id == scan.id
-                )
+                select(SensitiveDataObservation).where(SensitiveDataObservation.scan_id == scan.id)
             )
         )
         if scan
         else []
     )
     sensitive_endpoint_ids = {item.endpoint_id for item in observations}
-    findings = (
-        list(db.scalars(select(Finding).where(Finding.scan_id == scan.id))) if scan else []
-    )
+    findings = list(db.scalars(select(Finding).where(Finding.scan_id == scan.id))) if scan else []
     rules = (
         db.scalar(
             select(sa_func.count())
@@ -427,12 +422,8 @@ def access_profile_surface(db: Session, profile_id: int) -> AccessProfileSurface
             {item.category for item in observations}, key=lambda item: item.value
         ),
         cwes=sorted({item.cwe for item in findings}),
-        passive_findings=sum(
-            not (item.issue_key or "").startswith("authz:") for item in findings
-        ),
-        unique_issues=len(
-            {item.issue_key or f"{item.title}:{item.cwe}" for item in findings}
-        ),
+        passive_findings=sum(not (item.issue_key or "").startswith("authz:") for item in findings),
+        unique_issues=len({item.issue_key or f"{item.title}:{item.cwe}" for item in findings}),
         authorization_candidates=candidates,
         authorization_rules_related=rules,
         authorization_probes=len(probes),
@@ -440,18 +431,14 @@ def access_profile_surface(db: Session, profile_id: int) -> AccessProfileSurface
             item.result == AuthorizationProbeResult.CONFIRMED_BYPASS for item in probes
         ),
         inconclusive=sum(item.result == AuthorizationProbeResult.INCONCLUSIVE for item in probes),
-        message=None
-        if scan
-        else "No authenticated scan has been executed for this profile.",
+        message=None if scan else "No authenticated scan has been executed for this profile.",
     )
 
 
 def create_role_surface_snapshot(
     db: Session, scan: Scan, profile: AuthProfile
 ) -> RoleSurfaceSnapshot:
-    existing = db.scalar(
-        select(RoleSurfaceSnapshot).where(RoleSurfaceSnapshot.scan_id == scan.id)
-    )
+    existing = db.scalar(select(RoleSurfaceSnapshot).where(RoleSurfaceSnapshot.scan_id == scan.id))
     if existing is not None:
         return existing
     endpoints = list(
@@ -487,9 +474,7 @@ def create_role_surface_snapshot(
         sensitive_categories=sorted({item.category.value for item in observations}),
         cwes=sorted({item.cwe for item in passive}),
         passive_findings=len(passive),
-        unique_issues=len(
-            {item.issue_key or f"{item.title}:{item.cwe}" for item in passive}
-        ),
+        unique_issues=len({item.issue_key or f"{item.title}:{item.cwe}" for item in passive}),
         authorization_rules_related=rules,
     )
     db.add(snapshot)
@@ -553,9 +538,7 @@ def role_comparison(
         set(indexed_a) | set(indexed_b), key=lambda item: (item[1], item[0], item[2].value)
     ):
         key = (method, endpoint, resource_type)
-        state: Literal[
-            "ONLY_PROFILE_A", "ONLY_PROFILE_B", "COMMON", "UNKNOWN"
-        ] = (
+        state: Literal["ONLY_PROFILE_A", "ONLY_PROFILE_B", "COMMON", "UNKNOWN"] = (
             "UNKNOWN"
             if scan_a is None or scan_b is None
             else "COMMON"
@@ -676,9 +659,7 @@ def generate_authorization_candidates(
     return created
 
 
-def authorization_preview(
-    db: Session, target_id: int, profile_id: int
-) -> AuthorizationPreview:
+def authorization_preview(db: Session, target_id: int, profile_id: int) -> AuthorizationPreview:
     profile = db.get(AuthProfile, profile_id)
     if profile is None or profile.target_id != target_id:
         raise ValueError("Perfil de autenticação não pertence ao alvo.")
@@ -790,9 +771,7 @@ def scan_summary(db: Session, scan_id: int) -> ScanSummary:
         finding_occurrences=len(findings),
         cwes=sorted({item.cwe for item in findings}),
         owasp_mapped_findings=sum(item.owasp_category is not None for item in findings),
-        findings_without_direct_owasp_mapping=sum(
-            item.owasp_category is None for item in findings
-        ),
+        findings_without_direct_owasp_mapping=sum(item.owasp_category is None for item in findings),
         sensitive_endpoints=len({item.endpoint_id for item in observations}),
         sensitive_categories=sorted(
             {item.category for item in observations}, key=lambda item: item.value
@@ -806,6 +785,80 @@ def scan_summary(db: Session, scan_id: int) -> ScanSummary:
             item.result == AuthorizationProbeResult.INCONCLUSIVE for item in probes
         ),
         safe_scan_mode=target.safe_scan_mode,
+    )
+
+
+def scan_comparison(
+    db: Session, target_id: int, baseline_scan_id: int, current_scan_id: int
+) -> ScanComparison:
+    if baseline_scan_id == current_scan_id:
+        raise ValueError("Selecione dois scans diferentes para comparar.")
+    baseline = db.get(Scan, baseline_scan_id)
+    current = db.get(Scan, current_scan_id)
+    if baseline is None or current is None:
+        raise ValueError("Scan não encontrado.")
+    if baseline.target_id != target_id or current.target_id != target_id:
+        raise ValueError("Os scans devem pertencer ao alvo informado.")
+    if baseline.status != ScanStatus.COMPLETED or current.status != ScanStatus.COMPLETED:
+        raise ValueError("A comparação exige dois scans concluídos.")
+
+    def finding_key(item: Finding) -> str:
+        return item.issue_key or ":".join((item.title, item.cwe, sanitize_resource(item.endpoint)))
+
+    def finding_rows(scan_id: int) -> dict[str, Finding]:
+        rows = db.scalars(select(Finding).where(Finding.scan_id == scan_id).order_by(Finding.id))
+        return {finding_key(item): item for item in rows}
+
+    def finding_view(item: Finding) -> ScanComparisonFinding:
+        return ScanComparisonFinding(
+            title=item.title,
+            cwe=item.cwe,
+            severity=item.severity,
+            endpoint=sanitize_resource(item.endpoint),
+        )
+
+    baseline_findings = finding_rows(baseline_scan_id)
+    current_findings = finding_rows(current_scan_id)
+    baseline_keys = set(baseline_findings)
+    current_keys = set(current_findings)
+
+    def endpoint_rows(scan_id: int) -> dict[tuple[str, str], DiscoveredEndpoint]:
+        rows = db.scalars(
+            select(DiscoveredEndpoint)
+            .where(DiscoveredEndpoint.scan_id == scan_id)
+            .order_by(DiscoveredEndpoint.id)
+        )
+        return {(item.method.upper(), sanitize_resource(item.path)): item for item in rows}
+
+    def endpoint_view(key: tuple[str, str], item: DiscoveredEndpoint) -> ScanComparisonEndpoint:
+        return ScanComparisonEndpoint(method=key[0], path=key[1], resource_type=item.resource_type)
+
+    baseline_endpoints = endpoint_rows(baseline_scan_id)
+    current_endpoints = endpoint_rows(current_scan_id)
+    baseline_endpoint_keys = set(baseline_endpoints)
+    current_endpoint_keys = set(current_endpoints)
+
+    return ScanComparison(
+        target_id=target_id,
+        baseline_scan_id=baseline_scan_id,
+        current_scan_id=current_scan_id,
+        new_findings=[
+            finding_view(current_findings[key]) for key in sorted(current_keys - baseline_keys)
+        ],
+        resolved_findings=[
+            finding_view(baseline_findings[key]) for key in sorted(baseline_keys - current_keys)
+        ],
+        persistent_findings=[
+            finding_view(current_findings[key]) for key in sorted(current_keys & baseline_keys)
+        ],
+        added_endpoints=[
+            endpoint_view(key, current_endpoints[key])
+            for key in sorted(current_endpoint_keys - baseline_endpoint_keys)
+        ],
+        removed_endpoints=[
+            endpoint_view(key, baseline_endpoints[key])
+            for key in sorted(baseline_endpoint_keys - current_endpoint_keys)
+        ],
     )
 
 

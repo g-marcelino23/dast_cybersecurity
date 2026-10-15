@@ -1,6 +1,6 @@
-# DAST 0.21.0
+# DAST 0.22.0
 
-Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs autorizadas. A versão 0.21.0 amplia a análise passiva com TLS observado, conteúdo misto e redirects, preservando prova de propriedade, allowlist exata e bloqueio de destinos fora do escopo.
+Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs autorizadas. A versão 0.22.0 acrescenta comparação automática entre scans concluídos, preservando prova de propriedade, allowlist exata e bloqueio de destinos fora do escopo.
 
 ## Capacidades
 
@@ -10,6 +10,7 @@ Plataforma DAST para descoberta e análise dinâmica de aplicações web e APIs 
 - análise passiva de headers, cookies, CORS, TLS, conteúdo misto, redirects e exposição de servidor;
 - scans anônimos ou autenticados por login JSON/formulário, Cookie, Basic, Bearer Token, API Key ou headers personalizados;
 - comparação da superfície observada por diferentes perfis;
+- comparação de achados e endpoints entre scans concluídos do mesmo alvo;
 - probes de autorização GET/HEAD após revisão e confirmação;
 - findings classificados por severidade, confiança, CWE e OWASP;
 - agrupamento de ocorrências e acompanhamento do estado da correção;
@@ -164,4 +165,3 @@ métodos em `/__metrics` e rejeita POST, PUT, PATCH e DELETE. Não exponha esse 
 - aplicações com múltiplos componentes;
 - comparação diferencial de conteúdo e status com tolerância configurável;
 - autenticação OAuth/OIDC;
-- comparação automática entre scans;

@@ -168,7 +168,7 @@ def test_scan_stores_reproducibility_metadata_without_secrets(client) -> None:
     assert response.status_code == 201
     scan = response.json()
     assert scan["experiment_label"] == "doctor-baseline-01"
-    assert scan["dast_version"] == "0.21.0"
+    assert scan["dast_version"] == "0.22.0"
     assert "discovery" in scan["modules_enabled"]
     serialized = str(scan["configuration_snapshot"]).casefold()
     assert "password" not in serialized
