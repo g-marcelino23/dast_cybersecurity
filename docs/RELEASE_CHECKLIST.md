@@ -13,7 +13,7 @@
 ## Banco e execução integrada
 
 - [x] PostgreSQL isolado está saudável em loopback.
-- [ ] `alembic upgrade head` conclui e chega à revisão `0020_oauth_client_credentials`.
+- [x] `alembic upgrade head` conclui e chega à revisão `0020_oauth_client_credentials`.
 - [x] Backend responde `200` em `/health`.
 - [x] Frontend responde `200` em `http://localhost:5174`.
 - [x] É possível cadastrar um alvo local autorizado.
