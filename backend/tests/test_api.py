@@ -147,8 +147,9 @@ def test_public_target_requires_and_completes_ownership_verification(client):
 
         return real_client(transport=httpx.MockTransport(handler), **kwargs)
 
-    with patch("app.services.ownership.validate_target", side_effect=public_target), patch(
-        "app.services.ownership.httpx.Client", side_effect=client_factory
+    with (
+        patch("app.services.ownership.validate_target", side_effect=public_target),
+        patch("app.services.ownership.httpx.Client", side_effect=client_factory),
     ):
         verified = client.post(f"/targets/{target['id']}/ownership-verification")
     assert verified.status_code == 200
@@ -535,6 +536,10 @@ def test_manual_safe_api_requests_are_collected_and_analyzed(client):
     endpoint_by_path = {endpoint["path"]: endpoint for endpoint in endpoints}
     assert endpoint_by_path["/api/health"]["status_code"] == 200
     assert endpoint_by_path["/api/health"]["content_type"] == "application/json"
+    signature = endpoint_by_path["/api/health"]["metadata"]["response_signature"]
+    assert signature["approximate_size"] == len(manual_response.body or b"")
+    assert len(signature["structural_fingerprint"]) == 64
+    assert "person@example.test" not in str(signature)
     assert endpoint_by_path["/users/7"]["status_code"] is None
     assert endpoint_by_path["/users/{id}"]["status_code"] is None
     assert endpoint_by_path["/me"]["status_code"] is None

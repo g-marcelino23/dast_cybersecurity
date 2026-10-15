@@ -305,6 +305,16 @@ def test_urls_are_sanitized_without_query_or_identifiers() -> None:
 
 def test_scan_comparison_classifies_findings_and_endpoints(db: Session) -> None:
     target, owner, _tested, baseline = seed_surface(db)
+    baseline_endpoint = (
+        db.query(DiscoveredEndpoint).filter(DiscoveredEndpoint.scan_id == baseline.id).one()
+    )
+    baseline_endpoint.metadata_json = {
+        "response_signature": {
+            "content_type": "application/json",
+            "approximate_size": 100,
+            "structural_fingerprint": "stable-shape",
+        }
+    }
     current = Scan(
         target_id=target.id,
         auth_profile_id=owner.id,
@@ -371,6 +381,14 @@ def test_scan_comparison_classifies_findings_and_endpoints(db: Session) -> None:
                 method="GET",
                 source=DiscoverySource.NETWORK,
                 resource_type=ResourceType.API,
+                status_code=201,
+                metadata_json={
+                    "response_signature": {
+                        "content_type": "application/json",
+                        "approximate_size": 105,
+                        "structural_fingerprint": "stable-shape",
+                    }
+                },
             ),
             DiscoveredEndpoint(
                 scan_id=current.id,
@@ -400,6 +418,14 @@ def test_scan_comparison_classifies_findings_and_endpoints(db: Session) -> None:
     assert result.persistent_findings[0].endpoint == "/shared/{id}"
     assert [(item.method, item.path) for item in result.added_endpoints] == [("POST", "/api/new")]
     assert [(item.method, item.path) for item in result.removed_endpoints] == [("GET", "/old")]
+    assert result.compared_responses == 1
+    assert result.unchanged_responses == 0
+    assert result.response_changes[0].reasons == ["STATUS"]
+
+    strict_result = scan_comparison(
+        db, target.id, baseline.id, current.id, response_size_tolerance_percent=2
+    )
+    assert strict_result.response_changes[0].reasons == ["STATUS", "SIZE"]
 
 
 def test_scan_comparison_rejects_invalid_pairs(db: Session) -> None:

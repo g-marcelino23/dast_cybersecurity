@@ -1,10 +1,7 @@
-import hashlib
-import json
 import logging
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Protocol, cast
 from urllib.parse import urljoin
@@ -44,6 +41,7 @@ from app.schemas.entities import AuthorizationSummary, AuthorizationTestPlan, Re
 from app.services.analysis import sanitize_resource
 from app.services.authentication import Authenticator, ephemeral_auth_sessions
 from app.services.ownership import verified_public_hosts
+from app.services.response_signatures import StructuralSnapshot, structural_snapshot
 
 logger = logging.getLogger(__name__)
 PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -69,74 +67,6 @@ class AuthorizationExecutionConflict(AuthorizationValidationError):
 
 class RowCountResult(Protocol):
     rowcount: int
-
-
-@dataclass(frozen=True)
-class StructuralSnapshot:
-    fingerprint: str | None
-    metadata: dict[str, object]
-
-
-def _json_type(value: object) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "boolean"
-    if isinstance(value, str):
-        return "string"
-    if isinstance(value, (int, float)):
-        return "number"
-    if isinstance(value, list):
-        return "array"
-    if isinstance(value, dict):
-        return "object"
-    return "unknown"
-
-
-def structural_snapshot(response: ResponseSnapshot) -> StructuralSnapshot:
-    content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
-    paths: set[str] = set()
-    if response.body and "json" in content_type:
-        try:
-            document = json.loads(response.body)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            document = None
-
-        def walk(value: object, path: str) -> None:
-            current_path = path or "$"
-            value_type = _json_type(value)
-            if isinstance(value, (dict, list)) and not value:
-                paths.add(f"{current_path}:{value_type}(empty)")
-            else:
-                paths.add(f"{current_path}:{value_type}")
-            if isinstance(value, dict):
-                for key in sorted(value, key=lambda item: str(item).casefold()):
-                    child = f"{current_path}.{str(key)[:128]}"
-                    walk(value[key], child)
-            elif isinstance(value, list) and value:
-                walk(value[0], f"{current_path}[]")
-
-        walk(document, "")
-    representation = "\n".join(sorted(paths))
-    fingerprint = hashlib.sha256(representation.encode()).hexdigest() if representation else None
-    safe_headers: dict[str, str] = {}
-    for name in ("content-type", "content-length", "cache-control", "content-language"):
-        value = response.headers.get(name)
-        if value:
-            safe_headers[name] = value[:255]
-    location = response.headers.get("location")
-    if location:
-        safe_headers["location"] = sanitize_resource(location)
-    return StructuralSnapshot(
-        fingerprint=fingerprint,
-        metadata={
-            "status_code": response.status_code,
-            "content_type": content_type[:255],
-            "approximate_size": len(response.body or b""),
-            "field_paths": sorted(paths),
-            "headers": safe_headers,
-        },
-    )
 
 
 def pattern_matches(pattern: str, path: str) -> bool:
@@ -311,9 +241,7 @@ class AuthorizationService:
             ],
         )
 
-    def _claim_execution(
-        self, scenario_id: int, *, rerun: bool
-    ) -> AuthorizationTestScenario:
+    def _claim_execution(self, scenario_id: int, *, rerun: bool) -> AuthorizationTestScenario:
         now = datetime.now(UTC)
         stale_before = now - timedelta(seconds=self.settings.authz_execution_stale_seconds)
         self.db.execute(
@@ -358,7 +286,7 @@ class AuthorizationService:
                     execution_error_code=None,
                     execution_attempt=AuthorizationTestScenario.execution_attempt + 1,
                 )
-            )
+            ),
         )
         self.db.commit()
         self.db.expire_all()
@@ -423,9 +351,7 @@ class AuthorizationService:
                 ]
                 self.db.add_all(skipped_rows)
                 self.db.commit()
-                self._finish_execution(
-                    scenario.id, AuthorizationScenarioExecutionStatus.COMPLETED
-                )
+                self._finish_execution(scenario.id, AuthorizationScenarioExecutionStatus.COMPLETED)
                 for row in skipped_rows:
                     self.db.refresh(row)
                 return skipped_rows

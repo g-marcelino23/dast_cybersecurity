@@ -50,6 +50,7 @@ from app.schemas.entities import (
     ScanComparison,
     ScanComparisonEndpoint,
     ScanComparisonFinding,
+    ScanComparisonResponseChange,
     ScanSummary,
     SensitiveSurfaceMatrix,
     SensitiveSurfaceRow,
@@ -789,8 +790,14 @@ def scan_summary(db: Session, scan_id: int) -> ScanSummary:
 
 
 def scan_comparison(
-    db: Session, target_id: int, baseline_scan_id: int, current_scan_id: int
+    db: Session,
+    target_id: int,
+    baseline_scan_id: int,
+    current_scan_id: int,
+    response_size_tolerance_percent: float = 10.0,
 ) -> ScanComparison:
+    if not 0 <= response_size_tolerance_percent <= 100:
+        raise ValueError("A tolerância de tamanho deve estar entre 0 e 100%.")
     if baseline_scan_id == current_scan_id:
         raise ValueError("Selecione dois scans diferentes para comparar.")
     baseline = db.get(Scan, baseline_scan_id)
@@ -837,6 +844,101 @@ def scan_comparison(
     current_endpoints = endpoint_rows(current_scan_id)
     baseline_endpoint_keys = set(baseline_endpoints)
     current_endpoint_keys = set(current_endpoints)
+    common_endpoint_keys = baseline_endpoint_keys & current_endpoint_keys
+
+    def signature(item: DiscoveredEndpoint) -> dict[str, object] | None:
+        metadata = item.metadata_json or {}
+        value = metadata.get("response_signature")
+        return value if isinstance(value, dict) else None
+
+    response_changes: list[ScanComparisonResponseChange] = []
+    compared_responses = 0
+    for key in sorted(common_endpoint_keys):
+        baseline_endpoint = baseline_endpoints[key]
+        current_endpoint = current_endpoints[key]
+        baseline_signature = signature(baseline_endpoint)
+        current_signature = signature(current_endpoint)
+        if baseline_signature is None and current_signature is None:
+            continue
+        compared_responses += 1
+        reasons: list[
+            Literal["STATUS", "CONTENT_TYPE", "STRUCTURE", "SIZE", "SIGNATURE_UNAVAILABLE"]
+        ] = []
+        if baseline_signature is None or current_signature is None:
+            reasons.append("SIGNATURE_UNAVAILABLE")
+        else:
+            baseline_status_value = baseline_signature.get("status_code")
+            current_status_value = current_signature.get("status_code")
+            baseline_status = (
+                baseline_status_value
+                if isinstance(baseline_status_value, int)
+                else baseline_endpoint.status_code
+            )
+            current_status = (
+                current_status_value
+                if isinstance(current_status_value, int)
+                else current_endpoint.status_code
+            )
+            if baseline_status != current_status:
+                reasons.append("STATUS")
+            if baseline_signature.get("content_type") != current_signature.get("content_type"):
+                reasons.append("CONTENT_TYPE")
+            baseline_fingerprint = baseline_signature.get("structural_fingerprint")
+            current_fingerprint = current_signature.get("structural_fingerprint")
+            if (
+                isinstance(baseline_fingerprint, str)
+                and isinstance(current_fingerprint, str)
+                and baseline_fingerprint != current_fingerprint
+            ):
+                reasons.append("STRUCTURE")
+            baseline_size = baseline_signature.get("approximate_size")
+            current_size = current_signature.get("approximate_size")
+            if isinstance(baseline_size, int) and isinstance(current_size, int):
+                size_delta_percent = (
+                    0.0
+                    if baseline_size == current_size
+                    else 100.0
+                    if baseline_size == 0
+                    else abs(current_size - baseline_size) / baseline_size * 100
+                )
+                if size_delta_percent > response_size_tolerance_percent:
+                    reasons.append("SIZE")
+        if reasons:
+            baseline_status_value = (
+                baseline_signature.get("status_code") if baseline_signature else None
+            )
+            current_status_value = (
+                current_signature.get("status_code") if current_signature else None
+            )
+            baseline_size_value = (
+                baseline_signature.get("approximate_size") if baseline_signature else None
+            )
+            current_size_value = (
+                current_signature.get("approximate_size") if current_signature else None
+            )
+            response_changes.append(
+                ScanComparisonResponseChange(
+                    method=key[0],
+                    path=key[1],
+                    baseline_status=(
+                        baseline_status_value
+                        if isinstance(baseline_status_value, int)
+                        else baseline_endpoint.status_code
+                    ),
+                    current_status=(
+                        current_status_value
+                        if isinstance(current_status_value, int)
+                        else current_endpoint.status_code
+                    ),
+                    baseline_size=(
+                        baseline_size_value if isinstance(baseline_size_value, int) else None
+                    ),
+                    current_size=(
+                        current_size_value if isinstance(current_size_value, int) else None
+                    ),
+                    reasons=reasons,
+                )
+            )
 
     return ScanComparison(
         target_id=target_id,
@@ -859,6 +961,10 @@ def scan_comparison(
             endpoint_view(key, baseline_endpoints[key])
             for key in sorted(baseline_endpoint_keys - current_endpoint_keys)
         ],
+        response_size_tolerance_percent=response_size_tolerance_percent,
+        compared_responses=compared_responses,
+        unchanged_responses=compared_responses - len(response_changes),
+        response_changes=response_changes,
     )
 
 

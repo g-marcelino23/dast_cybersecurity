@@ -302,6 +302,27 @@ def test_empty_json_has_deterministic_structural_fingerprint():
     assert list_shape.metadata["field_paths"] == ["$:array(empty)"]
 
 
+def test_html_fingerprint_uses_structure_without_values():
+    first = ResponseSnapshot(
+        "http://localhost/a",
+        200,
+        httpx.Headers({"content-type": "text/html"}),
+        b'<main data-patient="Alice"><h1>Private value</h1></main>',
+    )
+    second = ResponseSnapshot(
+        "http://localhost/b",
+        200,
+        httpx.Headers({"content-type": "text/html"}),
+        b'<main data-patient="Bob"><h1>Another value</h1></main>',
+    )
+
+    one, two = structural_snapshot(first), structural_snapshot(second)
+
+    assert one.fingerprint == two.fingerprint
+    assert "Alice" not in json.dumps(one.metadata)
+    assert "Private value" not in json.dumps(one.metadata)
+
+
 def test_mutating_method_is_skipped_without_requests(authz_db):
     db, _target, owner, _tested, _scan, endpoint, rule, scenario = authz_db
     endpoint.method = rule.http_method = "POST"

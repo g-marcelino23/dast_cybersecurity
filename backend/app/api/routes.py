@@ -801,10 +801,17 @@ def get_scan_comparison(
     baseline_scan_id: int,
     current_scan_id: int,
     db: Db,
+    response_size_tolerance_percent: Annotated[float, Query(ge=0, le=100)] = 10.0,
 ) -> ScanComparison:
     require_target(db, target_id)
     try:
-        return scan_comparison(db, target_id, baseline_scan_id, current_scan_id)
+        return scan_comparison(
+            db,
+            target_id,
+            baseline_scan_id,
+            current_scan_id,
+            response_size_tolerance_percent,
+        )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

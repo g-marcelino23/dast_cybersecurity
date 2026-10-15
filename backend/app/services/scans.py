@@ -48,6 +48,7 @@ from app.services.manual_api import (
 from app.services.openapi import openapi_endpoints
 from app.services.ownership import verification_status, verified_public_hosts
 from app.services.postman import postman_endpoints
+from app.services.response_signatures import persisted_response_signature
 
 logger = logging.getLogger(__name__)
 
@@ -175,9 +176,7 @@ class ScanService:
                     auth = authenticator.authenticate(profile, target)
                 self._checkpoint(scan, "DISCOVERING", 20)
                 discovery = (
-                    self.crawler.crawl(
-                        target.base_url, target.api_url, auth, allowed_public_hosts
-                    )
+                    self.crawler.crawl(target.base_url, target.api_url, auth, allowed_public_hosts)
                     if allowed_public_hosts
                     else self.crawler.crawl(target.base_url, target.api_url, auth)
                 )
@@ -334,6 +333,7 @@ class ScanService:
             if set(scan.modules_enabled) & set(ACTIVE_MODULE_IDS):
                 self._checkpoint(scan, "ACTIVE_TESTING", 65)
                 active_scan = scan
+
                 def checkpoint(module_id: str) -> None:
                     self._active_checkpoint(active_scan, module_id)
 
@@ -355,6 +355,22 @@ class ScanService:
                         before_request=checkpoint,
                     )
             self._checkpoint(scan, "PERSISTING", 82)
+            response_signatures: dict[tuple[str, str], dict[str, object]] = {}
+            for response in [*discovery.responses, *configured_result.responses]:
+                response_key = (response.method, normalize_url(response.endpoint).url)
+                endpoint_key = manual_response_endpoint_keys.get(response_key, response_key)
+                response_signatures[endpoint_key] = persisted_response_signature(response)
+            for endpoint_observation in discovery.endpoints:
+                endpoint_key = (
+                    endpoint_observation.method,
+                    normalize_url(endpoint_observation.url).url,
+                )
+                signature = response_signatures.get(endpoint_key)
+                if signature is not None:
+                    endpoint_observation.metadata = {
+                        **(endpoint_observation.metadata or {}),
+                        "response_signature": signature,
+                    }
             endpoint_models = [
                 DiscoveredEndpoint(
                     scan_id=scan.id,

@@ -747,6 +747,16 @@ class ScanComparisonEndpoint(BaseModel):
     resource_type: ResourceType
 
 
+class ScanComparisonResponseChange(BaseModel):
+    method: str
+    path: str
+    baseline_status: int | None
+    current_status: int | None
+    baseline_size: int | None
+    current_size: int | None
+    reasons: list[Literal["STATUS", "CONTENT_TYPE", "STRUCTURE", "SIZE", "SIGNATURE_UNAVAILABLE"]]
+
+
 class ScanComparison(BaseModel):
     target_id: int
     baseline_scan_id: int
@@ -756,6 +766,10 @@ class ScanComparison(BaseModel):
     persistent_findings: list[ScanComparisonFinding]
     added_endpoints: list[ScanComparisonEndpoint]
     removed_endpoints: list[ScanComparisonEndpoint]
+    response_size_tolerance_percent: float
+    compared_responses: int
+    unchanged_responses: int
+    response_changes: list[ScanComparisonResponseChange]
 
 
 class PrivacyAnalysis(BaseModel):

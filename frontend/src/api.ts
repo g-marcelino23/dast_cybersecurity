@@ -75,7 +75,7 @@ export const api = {
   roleSurfaceSnapshots: (id: number) => request<RoleSurfaceSnapshot[]>(`/auth-profiles/${id}/role-surface-snapshots`),
   authorizationPreview: (targetId: number, profileId: number) => request<AuthorizationPreview>(`/targets/${targetId}/authorization-preview/${profileId}`),
   scanSummary: (scanId: number) => request<ScanSummary>(`/scans/${scanId}/summary`),
-  scanComparison: (targetId: number, baselineScanId: number, currentScanId: number) => request<ScanComparison>(`/targets/${targetId}/scan-comparison?baseline_scan_id=${baselineScanId}&current_scan_id=${currentScanId}`),
+  scanComparison: (targetId: number, baselineScanId: number, currentScanId: number, responseSizeTolerancePercent = 10) => request<ScanComparison>(`/targets/${targetId}/scan-comparison?baseline_scan_id=${baselineScanId}&current_scan_id=${currentScanId}&response_size_tolerance_percent=${responseSizeTolerancePercent}`),
   sensitiveData: (id: number) => request<SensitiveDataObservation[]>(`/scans/${id}/sensitive-data`),
   sensitiveDataSummary: (id: number) => request<SensitiveDataSummary>(`/scans/${id}/sensitive-data-summary`),
   authorizationRules: (targetId: number) => request<AuthorizationRule[]>(`/targets/${targetId}/authorization-rules`),
