@@ -13,7 +13,7 @@
 
 ## Banco e execução integrada
 
-- [x] PostgreSQL isolado está saudável em loopback.
+- [x] PostgreSQL 18 isolado está saudável em `127.0.0.1:55432`, sem dependência de Docker.
 - [x] `alembic upgrade head` conclui e chega à revisão `0020_oauth_client_credentials`.
 - [x] Backend responde `200` em `/health`.
 - [x] Frontend responde `200` em `http://localhost:5174`.

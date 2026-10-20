@@ -111,8 +111,23 @@ python -m venv .venv
 .venv\Scripts\python.exe -m playwright install chromium
 npm.cmd install --prefix frontend
 python scripts\setup_env.py
-docker compose up -d postgres
+.venv\Scripts\python.exe scripts\local_postgres.py start
 .venv\Scripts\python.exe -m alembic -c backend\alembic.ini upgrade head
+```
+
+No Windows, `scripts\local_postgres.py` é a opção recomendada: usa os binários do
+PostgreSQL já instalados, mantém um cluster isolado em `.runtime/postgres`, escuta
+somente em `127.0.0.1:55432` e não altera o serviço PostgreSQL do sistema. Para
+encerrar esse cluster:
+
+```powershell
+.venv\Scripts\python.exe scripts\local_postgres.py stop
+```
+
+Docker é opcional. Se preferir um container, substitua o comando acima por:
+
+```powershell
+docker compose up -d postgres
 ```
 
 Backend:
