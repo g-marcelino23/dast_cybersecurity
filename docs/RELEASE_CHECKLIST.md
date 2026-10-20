@@ -5,6 +5,7 @@
 - [x] `scripts/validate.ps1` termina sem erros.
 - [x] Os 196 testes backend passam em uma versão suportada do Python.
 - [x] Os testes frontend passam.
+- [x] O frontend cobre conexão/erro da API, cadastro de alvo e confirmação do Safe Active.
 - [x] Ruff, mypy, ESLint e TypeScript não reportam erros.
 - [x] O build Vite é gerado.
 - [x] `npm audit --omit=dev` não reporta vulnerabilidades.
