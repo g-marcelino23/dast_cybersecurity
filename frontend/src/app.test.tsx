@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,10 +6,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { api } from './api'
 import { Layout } from './components/Layout'
 import { DataProvider } from './data'
-import { Dashboard } from './pages/Dashboard'
 import { NewScan } from './pages/NewScan'
 import { Targets } from './pages/Targets'
-import type { Target } from './types'
+import type { Scan, Target } from './types'
 
 function jsonResponse(data: unknown, status = 200): Response {
   return {
@@ -19,13 +18,13 @@ function jsonResponse(data: unknown, status = 200): Response {
   } as Response
 }
 
-function renderDashboard() {
+function renderHome() {
   return render(
     <MemoryRouter>
       <DataProvider>
         <Routes>
           <Route element={<Layout/>}>
-            <Route index element={<Dashboard/>}/>
+            <Route index element={<NewScan/>}/>
           </Route>
         </Routes>
       </DataProvider>
@@ -85,38 +84,41 @@ describe('workspace shell', () => {
 
   it('carrega o dashboard quando a API responde', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])))
-    renderDashboard()
+    renderHome()
 
     expect(screen.getByText('Carregando workspace…')).toBeInTheDocument()
-    expect(await screen.findByText('Segurança em perspectiva.')).toBeInTheDocument()
+    expect(await screen.findByText('Escaneie uma aplicação pela URL.')).toBeInTheDocument()
     expect(screen.getByText('API conectada')).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledTimes(3)
   })
 
   it('mostra um erro acionável quando a API está indisponível', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('connection refused')))
-    renderDashboard()
+    renderHome()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Não foi possível conectar à API')
     expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeInTheDocument()
   })
 
-  it('exige confirmação explícita antes de habilitar um Safe Active scan', async () => {
-    mockWorkspace([localTarget])
-    vi.spyOn(api, 'scanModules').mockResolvedValue([])
-    vi.spyOn(api, 'authProfiles').mockResolvedValue([])
-    vi.spyOn(api, 'apiRequests').mockResolvedValue([])
+  it('cadastra a URL e inicia um Safe Active scan em um clique', async () => {
+    mockWorkspace()
+    const createTarget = vi.spyOn(api, 'createTarget').mockResolvedValue(localTarget)
+    const createScan = vi.spyOn(api, 'createScan').mockResolvedValue({ id: 42 } as Scan)
+    const startScan = vi.spyOn(api, 'startScan').mockResolvedValue({ id: 42 } as Scan)
     const user = userEvent.setup()
 
-    renderPage('/new-scan?target=1', <NewScan/>)
+    renderPage('/new-scan', <NewScan/>)
 
-    const safeActive = await screen.findByRole('button', { name: /Safe Active/ })
-    await user.click(safeActive)
-    const submit = screen.getByRole('button', { name: 'Iniciar varredura' })
-    expect(submit).toBeDisabled()
+    await user.type(await screen.findByLabelText('URL do site ou aplicação'), 'http://localhost:5173')
+    await user.click(screen.getByRole('button', { name: 'Escanear agora' }))
 
-    await user.click(screen.getByRole('checkbox', { name: /Confirmo que tenho autorização/ }))
-    expect(submit).toBeEnabled()
+    await waitFor(() => expect(startScan).toHaveBeenCalledWith(42))
+    expect(createTarget).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'localhost:5173',
+      base_url: 'http://localhost:5173',
+      safe_scan_mode: true,
+    }))
+    expect(createScan).toHaveBeenCalledWith(1, undefined, undefined, 'SAFE_ACTIVE', undefined, true)
   })
 
   it('envia os dados sanitizados ao cadastrar um alvo local', async () => {

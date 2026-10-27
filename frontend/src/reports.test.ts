@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { api } from './api'
-import { downloadHtmlReport, downloadReport, downloadSarifReport } from './pages/Scans'
+import { buildHtmlReport, downloadHtmlReport, downloadReport, downloadSarifReport } from './pages/Scans'
 import type { Finding, Scan, Target } from './types'
 
 const scan = {
@@ -81,6 +81,7 @@ describe('report exports', () => {
       downloads.push(this.download)
     })
 
+    const html = await buildHtmlReport(scan, target, findings)
     await downloadReport(scan, target, findings)
     await downloadHtmlReport(scan, target, findings)
     downloadSarifReport(scan, findings)
@@ -96,5 +97,12 @@ describe('report exports', () => {
       'application/sarif+json',
     ])
     expect(blobs.every(blob => blob.size > 0)).toBe(true)
+    expect(html).toContain('Resumo executivo')
+    expect(html).toContain('Detalhamento técnico')
+    expect(html).toContain('Imprimir ou salvar em PDF')
+    expect(html).toContain('Laboratório &lt;seguro&gt;')
+    expect(html).toContain('Entrada &lt;refletida&gt;')
+    expect(html).not.toContain('Laboratório <seguro>')
+    expect(html).not.toContain('Entrada <refletida>')
   })
 })
